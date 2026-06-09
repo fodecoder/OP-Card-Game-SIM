@@ -1,0 +1,1068 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: One Piece TCG Simulator API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: cards
+    description: Card database operations
+  - name: decks
+    description: Deck builder operations
+  - name: collection
+    description: User collection operations
+  - name: games
+    description: Game room operations
+  - name: users
+    description: User profile operations
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterInput"
+      responses:
+        "201":
+          description: Registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Username or email already taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/refresh:
+    post:
+      operationId: refreshToken
+      tags: [auth]
+      summary: Refresh access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshInput"
+      responses:
+        "200":
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid refresh token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout and invalidate refresh token
+      responses:
+        "204":
+          description: Logged out
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current authenticated user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /cards:
+    get:
+      operationId: listCards
+      tags: [cards]
+      summary: List cards with optional filters and pagination
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Full-text search across name and effect text
+        - name: color
+          in: query
+          schema:
+            type: string
+          description: Filter by color (red, green, blue, purple, black, yellow)
+        - name: type
+          in: query
+          schema:
+            type: string
+          description: Filter by card type (leader, character, event, stage)
+        - name: rarity
+          in: query
+          schema:
+            type: string
+          description: Filter by rarity (C, UC, R, SR, L, SP, SEC)
+        - name: set
+          in: query
+          schema:
+            type: string
+          description: Filter by set code (e.g. OP01, OP02)
+        - name: cost
+          in: query
+          schema:
+            type: integer
+          description: Filter by exact cost
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Paginated card list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CardListResponse"
+
+  /cards/{id}:
+    get:
+      operationId: getCard
+      tags: [cards]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      summary: Get a single card by ID
+      responses:
+        "200":
+          description: Card found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Card"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /decks:
+    get:
+      operationId: listDecks
+      tags: [decks]
+      summary: List current user's decks
+      responses:
+        "200":
+          description: List of decks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Deck"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createDeck
+      tags: [decks]
+      summary: Create a new deck
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeckInput"
+      responses:
+        "201":
+          description: Deck created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Deck"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /decks/starters:
+    post:
+      operationId: claimStarterDecks
+      tags: [decks]
+      summary: Create pre-built starter decks for the current user
+      responses:
+        "201":
+          description: Starter decks created
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Deck"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /decks/{id}:
+    get:
+      operationId: getDeck
+      tags: [decks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      summary: Get a deck with its full card list
+      responses:
+        "200":
+          description: Deck with cards
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeckWithCards"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateDeck
+      tags: [decks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      summary: Update deck metadata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeckUpdate"
+      responses:
+        "200":
+          description: Deck updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Deck"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteDeck
+      tags: [decks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      summary: Delete a deck
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /decks/{id}/cards:
+    post:
+      operationId: addCardToDeck
+      tags: [decks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      summary: Add or update a card entry in a deck
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeckCardInput"
+      responses:
+        "200":
+          description: Card added/updated in deck
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeckWithCards"
+        "400":
+          description: Deck validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /decks/{id}/cards/{cardId}:
+    delete:
+      operationId: removeCardFromDeck
+      tags: [decks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: cardId
+          in: path
+          required: true
+          schema:
+            type: integer
+      summary: Remove a card from a deck
+      responses:
+        "200":
+          description: Card removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeckWithCards"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /collection:
+    get:
+      operationId: getCollection
+      tags: [collection]
+      summary: Get current user's card collection
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: User collection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectionResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: addToCollection
+      tags: [collection]
+      summary: Add or update a card in the user's collection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CollectionCardInput"
+      responses:
+        "200":
+          description: Collection updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectionCard"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /collection/{cardId}:
+    delete:
+      operationId: removeFromCollection
+      tags: [collection]
+      parameters:
+        - name: cardId
+          in: path
+          required: true
+          schema:
+            type: integer
+      summary: Remove a card from collection
+      responses:
+        "204":
+          description: Removed
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /games:
+    get:
+      operationId: listGames
+      tags: [games]
+      summary: List open/active game rooms
+      responses:
+        "200":
+          description: List of games
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Game"
+    post:
+      operationId: createGame
+      tags: [games]
+      summary: Create a new game room
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GameInput"
+      responses:
+        "201":
+          description: Game room created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /games/{id}:
+    get:
+      operationId: getGame
+      tags: [games]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      summary: Get game room details
+      responses:
+        "200":
+          description: Game details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteGame
+      tags: [games]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      summary: Close/delete a game room (host only, waiting status)
+      responses:
+        "204":
+          description: Game deleted
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /games/{id}/join:
+    post:
+      operationId: joinGame
+      tags: [games]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      summary: Join an existing game room
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JoinGameInput"
+      responses:
+        "200":
+          description: Joined game
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+        "400":
+          description: Room full or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users/me:
+    get:
+      operationId: getUserProfile
+      tags: [users]
+      summary: Get current user profile
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateUserProfile
+      tags: [users]
+      summary: Update current user profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserProfileUpdate"
+      responses:
+        "200":
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users/me/stats:
+    get:
+      operationId: getUserStats
+      tags: [users]
+      summary: Get current user stats (wins, losses, win rate, games played)
+      responses:
+        "200":
+          description: User stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserStats"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    User:
+      type: object
+      required: [id, username, email, createdAt]
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    UserProfile:
+      type: object
+      required: [id, username, email, gamesPlayed, wins, losses, createdAt]
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        gamesPlayed:
+          type: integer
+        wins:
+          type: integer
+        losses:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    UserStats:
+      type: object
+      required: [gamesPlayed, wins, losses, winRate]
+      properties:
+        gamesPlayed:
+          type: integer
+        wins:
+          type: integer
+        losses:
+          type: integer
+        winRate:
+          type: number
+
+    RegisterInput:
+      type: object
+      required: [username, email, password]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 20
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+
+    RefreshInput:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+
+    AuthResponse:
+      type: object
+      required: [accessToken, refreshToken, user]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+
+    UserProfileUpdate:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 20
+        avatarUrl:
+          type: string
+
+    Card:
+      type: object
+      required: [id, cardNumber, name, cardType, color, rarity, setCode]
+      properties:
+        id:
+          type: integer
+        cardNumber:
+          type: string
+        name:
+          type: string
+        cardType:
+          type: string
+        color:
+          type: string
+        rarity:
+          type: string
+        setCode:
+          type: string
+        cost:
+          type: ["integer", "null"]
+        power:
+          type: ["integer", "null"]
+        counter:
+          type: ["integer", "null"]
+        attribute:
+          type: ["string", "null"]
+        effectText:
+          type: ["string", "null"]
+        triggerEffect:
+          type: ["string", "null"]
+        life:
+          type: ["integer", "null"]
+        cardTypes:
+          type: ["string", "null"]
+        imageUrl:
+          type: ["string", "null"]
+        keywords:
+          type: array
+          items:
+            type: string
+        restriction:
+          type: ["string", "null"]
+          description: "Ban/restriction status: banned, limited_1, limited_2, or null"
+
+    CardListResponse:
+      type: object
+      required: [cards, total, page, limit]
+      properties:
+        cards:
+          type: array
+          items:
+            $ref: "#/components/schemas/Card"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    Deck:
+      type: object
+      required: [id, name, leaderId, leaderName, cardCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        leaderId:
+          type: ["integer", "null"]
+        leaderName:
+          type: ["string", "null"]
+        leaderImageUrl:
+          type: ["string", "null"]
+        leaderColor:
+          type: ["string", "null"]
+        cardCount:
+          type: integer
+        isValid:
+          type: boolean
+        description:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DeckCard:
+      type: object
+      required: [cardId, quantity, card]
+      properties:
+        cardId:
+          type: integer
+        quantity:
+          type: integer
+        card:
+          $ref: "#/components/schemas/Card"
+
+    DeckWithCards:
+      type: object
+      required: [id, name, leaderId, leaderName, cardCount, createdAt, updatedAt, cards]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        leaderId:
+          type: ["integer", "null"]
+        leaderName:
+          type: ["string", "null"]
+        leaderImageUrl:
+          type: ["string", "null"]
+        leaderColor:
+          type: ["string", "null"]
+        cardCount:
+          type: integer
+        isValid:
+          type: boolean
+        description:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        cards:
+          type: array
+          items:
+            $ref: "#/components/schemas/DeckCard"
+
+    DeckInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+        leaderId:
+          type: integer
+
+    DeckUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+        leaderId:
+          type: integer
+
+    DeckCardInput:
+      type: object
+      required: [cardId, quantity]
+      properties:
+        cardId:
+          type: integer
+        quantity:
+          type: integer
+          minimum: 0
+          maximum: 4
+
+    CollectionCard:
+      type: object
+      required: [cardId, quantity, card]
+      properties:
+        cardId:
+          type: integer
+        quantity:
+          type: integer
+        isFavorite:
+          type: boolean
+        card:
+          $ref: "#/components/schemas/Card"
+
+    CollectionResponse:
+      type: object
+      required: [cards, total, page, limit]
+      properties:
+        cards:
+          type: array
+          items:
+            $ref: "#/components/schemas/CollectionCard"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    CollectionCardInput:
+      type: object
+      required: [cardId, quantity]
+      properties:
+        cardId:
+          type: integer
+        quantity:
+          type: integer
+          minimum: 0
+
+    Game:
+      type: object
+      required: [id, status, hostId, hostUsername, createdAt]
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+        isPrivate:
+          type: boolean
+        hostId:
+          type: integer
+        hostUsername:
+          type: string
+        hostDeckId:
+          type: ["integer", "null"]
+        guestId:
+          type: ["integer", "null"]
+        guestUsername:
+          type: ["string", "null"]
+        guestDeckId:
+          type: ["integer", "null"]
+        winnerId:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: ["string", "null"]
+          format: date-time
+        endedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    GameInput:
+      type: object
+      required: [deckId]
+      properties:
+        deckId:
+          type: integer
+        isPrivate:
+          type: boolean
+        isLocal:
+          type: boolean
+        guestDeckId:
+          type: integer
+
+    JoinGameInput:
+      type: object
+      required: [deckId]
+      properties:
+        deckId:
+          type: integer

@@ -1,0 +1,323 @@
+L'app deve funzionare:
+
+su mobile (iOS e Android)
+via browser desktop
+con UI responsive moderna
+con performance ottimizzate per grandi quantità di carte
+
+Stack richiesto:
+
+Frontend: React Native + Expo + React Native Web
+Backend: Node.js + TypeScript
+Database: PostgreSQL
+Realtime: WebSocket / Socket.io
+ORM: Prisma
+Auth: JWT + refresh token
+Storage immagini: CDN/object storage ottimizzato
+Stato frontend: Zustand oppure Redux Toolkit
+Architettura pulita e modulare
+
+I file PDF allegati contengono:
+
+regole ufficiali
+FAQ
+definizione delle abilità
+timing
+condizioni di gioco
+struttura delle carte
+flow delle partite
+
+Analizza completamente i PDF e genera il motore del gioco basandoti ESATTAMENTE sulle regole presenti.
+
+Obiettivo principale
+
+Creare un simulatore competitivo online di TCG con:
+
+deck building
+collezione personale
+matchmaking online
+partite realtime
+regole automatizzate
+gestione stack/abilità/timing
+supporto futuro a ranked e tornei
+FUNZIONALITÀ PRINCIPALI
+1. Sistema account
+
+Implementa:
+
+registrazione
+login
+recupero password
+profilo utente
+avatar
+username univoco
+friend list
+stato online/offline
+cronologia partite
+2. Database carte
+
+Ogni carta deve avere:
+
+id univoco
+nome
+immagine
+costo
+tipo
+sottotipo
+rarità
+set
+testo effetto
+attributi
+statistiche
+tags
+rulings
+keyword
+metadata vari
+
+Le immagini devono essere:
+
+lazy loaded
+compresse
+cachate
+servite via CDN
+ottimizzate mobile
+
+Implementa:
+
+ricerca full-text
+filtri avanzati
+sorting
+paginazione virtualizzata
+caricamento progressivo immagini
+3. Sistema abilità
+
+Le abilità devono essere completamente data-driven.
+
+Ogni abilità deve supportare:
+
+trigger
+condizioni
+target
+costi
+effetti
+durata
+stack/timing
+priorità
+replacement effects
+effetti continui
+effetti temporanei
+keyword actions
+
+Il sistema NON deve usare hardcoding per singole carte.
+
+Costruisci:
+
+game engine modulare
+effect resolution engine
+event bus interno
+stack system
+phase manager
+turn manager
+targeting engine
+rule validation engine
+
+Le regole devono essere facilmente espandibili.
+
+4. Simulatore partita
+
+Implementa:
+
+lobby multiplayer
+stanze private
+matchmaking pubblico
+spectate mode
+reconnect automatico
+timer turno
+cronologia azioni
+log completo partita
+replay system basilare
+
+Flow partita:
+
+mulligan
+draw
+main phase
+battle/combat
+end phase
+gestione priorità
+gestione trigger simultanei
+
+Tutto deve seguire rigorosamente i PDF allegati.
+
+5. Deck Builder
+
+L'utente deve poter:
+
+creare mazzi
+clonare mazzi
+import/export decklist
+cercare carte
+vedere curve statistiche
+validare legalità mazzo
+salvare versioni
+vedere probabilità di pescata iniziale
+
+Aggiungi:
+
+drag and drop
+anteprima carta
+ricerca ultra veloce
+filtri avanzati
+6. Collezione utente
+
+Implementa:
+
+collezione personale
+quantità copie
+wishlist
+filtri
+preferiti
+progressione completamento set
+
+Possibilità future:
+
+crafting
+trading
+marketplace
+
+Preparare architettura estendibile.
+
+7. UX/UI
+
+Stile:
+
+moderno
+competitivo
+leggibile
+veloce
+mobile-first
+
+UI richiesta:
+
+animazioni fluide
+transizioni leggere
+gesture mobile
+dark mode
+supporto tablet
+layout desktop avanzato
+
+Durante le partite:
+
+hand UI
+battlefield dinamico
+stack viewer
+action queue
+log realtime
+zoom carte
+tap/hold interaction
+8. Performance
+
+Ottimizzare per:
+
+migliaia di carte
+partite realtime
+basso consumo memoria
+caricamento rapido
+reconnect rapido
+
+Implementa:
+
+caching aggressivo
+memoization
+websocket optimization
+virtualized lists
+image prefetching
+optimistic updates
+9. Sicurezza
+
+Implementa:
+
+validazione server authoritative
+anti-cheat basilare
+rate limiting
+protezione websocket
+sanitizzazione input
+controllo sincronizzazione partita
+
+Il server deve essere authoritative:
+nessuna logica critica deve dipendere dal client.
+
+10. Admin tools
+
+Crea pannello admin con:
+
+upload nuove carte
+import bulk JSON/CSV
+editor abilità
+gestione set
+banlist
+analytics base
+moderazione utenti
+11. Architettura
+
+Richiedo:
+
+clean architecture
+separazione domain/application/infrastructure
+codice altamente modulare
+testabile
+scalabile
+commentato solo dove necessario
+
+Genera:
+
+struttura cartelle professionale
+README completo
+setup automatico
+script seed database
+environment variables template
+docker support
+12. Testing
+
+Implementa:
+
+unit test game engine
+integration test websocket
+validation test regole
+simulazioni automatiche partite
+13. Deployment
+
+Prepara deployment per:
+
+Replit
+web app pubblica
+mobile app Expo
+futuro deploy App Store / Google Play
+
+Configurare:
+
+variabili ambiente
+build scripts
+CI/CD base
+14. Obiettivo finale
+
+Il risultato deve sembrare un vero simulatore competitivo professionale di TCG online, scalabile e pronto per future espansioni.
+
+Prima analizza completamente i PDF allegati e crea:
+
+schema regole
+architettura game engine
+modello dati carte
+flow partita
+sistema abilità
+struttura database
+
+Solo dopo genera il codice iniziale.
+
+Aggiungi anche:
+
+roadmap tecnica
+backlog MVP
+milestone sviluppo
+priorità implementazione
+suggerimenti per scalabilità futura

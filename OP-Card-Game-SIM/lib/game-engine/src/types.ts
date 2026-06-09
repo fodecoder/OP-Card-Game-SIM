@@ -1,0 +1,82 @@
+export interface DBCard {
+  id: number;
+  cardNumber: string;
+  name: string;
+  cardType: string;
+  color: string;
+  rarity: string;
+  setCode: string;
+  cost: number | null;
+  power: number | null;
+  counter: number | null;
+  attribute: string | null;
+  life: number | null;
+  cardTypes: string | null;
+  effectText: string | null;
+  triggerEffect: string | null;
+  keywords: string[];
+  imageUrl: string | null;
+}
+
+export interface CardInstance extends DBCard {
+  instanceId: string;
+  rested: boolean;
+  attachedDon: number;
+  summonedThisTurn: boolean;
+}
+
+export interface PlayerState {
+  userId: number;
+  deckId: number;
+  leader: CardInstance;
+  life: CardInstance[];
+  hand: CardInstance[];
+  deck: CardInstance[];
+  field: CardInstance[];
+  trash: CardInstance[];
+  donDeck: number;
+  donActive: number;
+  donRested: number;
+}
+
+export interface PendingAttack {
+  attackerSide: PlayerSide;
+  attackerInstanceId: string;
+  defenderSide: PlayerSide;
+  targetInstanceId: string;
+  counterPower: number;
+}
+
+export type Phase = "refresh" | "draw" | "don" | "main" | "battle" | "end";
+export type PlayerSide = "host" | "guest";
+
+export interface GameState {
+  turn: number;
+  activePlayer: PlayerSide;
+  phase: Phase;
+  host: PlayerState;
+  guest: PlayerState;
+  winner: PlayerSide | null;
+  log: string[];
+  pendingAttack: PendingAttack | null;
+}
+
+export type GameAction =
+  | { type: "pass_phase" }
+  | { type: "end_turn" }
+  | { type: "play_card"; instanceId: string }
+  | { type: "give_don"; targetInstanceId: string; donCount: number }
+  | {
+      type: "declare_attack";
+      attackerInstanceId: string;
+      targetSide: PlayerSide;
+      targetInstanceId: string;
+    }
+  | { type: "declare_counter"; cardInstanceIds: string[] }
+  | { type: "resolve_attack" }
+  | { type: "concede" };
+
+export interface GameActionResult {
+  state: GameState;
+  error?: string;
+}
