@@ -15,13 +15,12 @@ import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { useState, useEffect } from "react";
 import * as Haptics from "expo-haptics";
+import { getApiBaseUrl } from "@/lib/url";
 
 function resolveUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  const base = process.env.EXPO_PUBLIC_DOMAIN
-    ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
-    : "";
+  const base = getApiBaseUrl();
   return `${base}${url}`;
 }
 

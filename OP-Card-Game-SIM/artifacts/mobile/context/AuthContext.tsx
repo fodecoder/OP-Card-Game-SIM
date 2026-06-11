@@ -2,6 +2,7 @@ import { setAuthTokenGetter, setTokenRefresher } from "@workspace/api-client-rea
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { User } from "@workspace/api-client-react";
+import { getApiBaseUrl } from "@/lib/url";
 
 interface AuthContextType {
   user: User | null;
@@ -22,9 +23,7 @@ async function doLogout() {
 
 async function callRefreshEndpoint(refreshToken: string): Promise<{ accessToken: string; refreshToken: string } | null> {
   try {
-    const baseUrl = process.env.EXPO_PUBLIC_DOMAIN
-      ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
-      : "";
+    const baseUrl = getApiBaseUrl();
     const res = await fetch(`${baseUrl}/api/auth/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

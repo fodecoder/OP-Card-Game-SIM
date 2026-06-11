@@ -35,7 +35,7 @@ export default function LoginScreen() {
       );
       router.replace("/(tabs)");
     } catch (err: any) {
-      setError(err?.error || "Failed to login. Please try again.");
+      setError(err?.data?.error || err?.message || "Failed to login. Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   };

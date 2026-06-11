@@ -18,6 +18,7 @@ export const cardsTable = pgTable("cards", {
   triggerEffect: text("trigger_effect"),
   life: integer("life"),
   cardTypes: text("card_types"),
+  subtypes: text("subtypes").array().notNull().default([]),
   imageUrl: text("image_url"),
   keywords: text("keywords").array().notNull().default([]),
   restriction: text("restriction"),

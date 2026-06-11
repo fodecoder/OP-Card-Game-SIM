@@ -494,6 +494,10 @@ async function seed() {
   console.log("Seeding cards...");
 
   for (const card of sampleCards) {
+    const subtypes = card.cardTypes
+      ? card.cardTypes.split("/").map((s: string) => s.trim())
+      : [];
+
     await db
       .insert(cardsTable)
       .values({
@@ -511,12 +515,13 @@ async function seed() {
         triggerEffect: card.triggerEffect ?? null,
         life: card.life ?? null,
         cardTypes: card.cardTypes ?? null,
+        subtypes: subtypes,
         imageUrl: card.imageUrl ?? null,
         keywords: card.keywords ?? [],
       })
       .onConflictDoUpdate({
         target: cardsTable.cardNumber,
-        set: { imageUrl: card.imageUrl ?? null, name: card.name },
+        set: { imageUrl: card.imageUrl ?? null, name: card.name, subtypes: subtypes },
       });
   }
 

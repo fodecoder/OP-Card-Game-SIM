@@ -16,12 +16,13 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/context/AuthContext";
 import { setBaseUrl } from "@workspace/api-client-react";
+import { getApiBaseUrl } from "@/lib/url";
 
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
-setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
+setBaseUrl(getApiBaseUrl());
 
 function RootLayoutNav() {
   return (

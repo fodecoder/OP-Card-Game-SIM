@@ -38,7 +38,7 @@ export default function RegisterScreen() {
       );
       router.replace("/(tabs)");
     } catch (err: any) {
-      setError(err?.error || "Failed to register. Please try again.");
+      setError(err?.data?.error || err?.message || "Failed to register. Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   };

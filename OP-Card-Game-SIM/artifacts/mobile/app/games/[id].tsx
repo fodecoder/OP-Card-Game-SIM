@@ -14,11 +14,10 @@ import { Feather } from "@expo/vector-icons";
 import { useAuth } from "@/context/AuthContext";
 import { useState } from "react";
 import * as Haptics from "expo-haptics";
+import { getApiBaseUrl } from "@/lib/url";
 
 function apiBase(): string {
-  return process.env.EXPO_PUBLIC_DOMAIN
-    ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
-    : "http://localhost:80";
+  return getApiBaseUrl();
 }
 
 export default function GameRoomScreen() {

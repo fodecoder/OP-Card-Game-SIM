@@ -11,11 +11,10 @@ interface CardImageProps {
   style?: any;
 }
 
+import { getApiBaseUrl } from "@/lib/url";
+
 function getBaseUrl() {
-  if (process.env.EXPO_PUBLIC_DOMAIN) {
-    return `https://${process.env.EXPO_PUBLIC_DOMAIN}`;
-  }
-  return "";
+  return getApiBaseUrl();
 }
 
 export function CardImage({ card, width = "100%", height = "100%", style }: CardImageProps) {

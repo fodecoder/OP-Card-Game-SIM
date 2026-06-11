@@ -15,6 +15,7 @@ async function loadDeckCards(deckId: number) {
     .where(eq(deckCardsTable.deckId, deckId));
   const cards = rows.map((r) => ({
     ...r.card,
+    subtypes: r.card.subtypes ?? [],
     keywords: r.card.keywords ?? [],
   }));
   return cards;

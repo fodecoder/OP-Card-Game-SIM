@@ -17,6 +17,7 @@ import { Feather } from "@expo/vector-icons";
 import { useState, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { GameState, CardInstance, PlayerSide, GameAction } from "@workspace/game-engine";
+import { getApiBaseUrl } from "@/lib/url";
 
 const TYPE_ORDER: Record<string, number> = { character: 0, event: 1, stage: 2, leader: 3 };
 
@@ -33,9 +34,7 @@ function sortHand(hand: CardInstance[]): CardInstance[] {
 }
 
 function apiBase(): string {
-  return process.env.EXPO_PUBLIC_DOMAIN
-    ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
-    : "http://localhost:80";
+  return getApiBaseUrl();
 }
 
 async function fetchGameState(gameId: number, token: string | null) {
@@ -234,7 +233,7 @@ export default function GameBoardScreen() {
   const gameId = parseInt(id as string, 10);
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { accessToken } = useAuth();
+  const { accessToken, logout } = useAuth();
   const qc = useQueryClient();
 
   const [perspective, setPerspective] = useState<PlayerSide>("host");
@@ -304,9 +303,9 @@ export default function GameBoardScreen() {
   const busy = actionMutation.isPending;
 
   const canPlayCard = isMyTurn && state.phase === "main" && !state.winner && !state.pendingAttack;
-  const canAttack = isMyTurn && state.phase === "battle" && !state.winner && !state.pendingAttack;
-  const canPassPhase = isMyTurn && (state.phase === "main" || state.phase === "battle") && !state.winner && !state.pendingAttack;
-  const canEndTurn = isMyTurn && (state.phase === "main" || state.phase === "battle") && !state.winner && !state.pendingAttack;
+  const canAttack = isMyTurn && state.phase === "main" && !state.winner && !state.pendingAttack;
+  const canPassPhase = isMyTurn && (state.phase === "main" || state.phase === "end") && !state.winner && !state.pendingAttack;
+  const canEndTurn = isMyTurn && (state.phase === "main" || state.phase === "end") && !state.winner && !state.pendingAttack;
 
   const isDefenderInPending = state.pendingAttack?.defenderSide === perspective;
   const isAttackerInPending = state.pendingAttack?.attackerSide === perspective;
@@ -380,7 +379,7 @@ export default function GameBoardScreen() {
     setDonMode(false);
   }
 
-  const passPhaseLabel = state.phase === "main" ? "Enter Battle" : "Back to Main";
+  const passPhaseLabel = state.phase === "main" ? "End Phase" : "Pass Phase";
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
@@ -415,6 +414,16 @@ export default function GameBoardScreen() {
           <Text style={[styles.perspectiveBtnText, { color: colors.primary }]}>
             {perspective === "host" ? "Host" : "Guest"}
           </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.perspectiveBtn, { backgroundColor: colors.destructive }]}
+          onPress={async () => {
+            await logout();
+            router.replace("/auth/login");
+          }}
+        >
+          <Feather name="log-out" size={14} color={colors.primaryForeground} />
+          <Text style={[styles.perspectiveBtnText, { color: colors.primaryForeground }]}>Logout</Text>
         </TouchableOpacity>
       </View>
 
@@ -498,6 +507,23 @@ export default function GameBoardScreen() {
               ? ` (+${me.hand.filter((c) => counterSelectedIds.includes(c.instanceId)).reduce((s, c) => s + (c.counter ?? 0), 0)} selected)`
               : ""}
           </Text>
+          {/* Blocker activation for defender */}
+          {isDefenderInPending && (
+            <View style={styles.blockerRow}>
+              {opp.field
+                .filter((c) => c.keywords.includes("Blocker") && !c.rested)
+                .map((b) => (
+                  <TouchableOpacity
+                    key={b.instanceId}
+                    style={[styles.blockerBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
+                    onPress={() => doAction({ type: "activate_blocker", blockerInstanceId: b.instanceId })}
+                    disabled={busy}
+                  >
+                    <Text style={[styles.blockerBtnText, { color: colors.foreground }]}>Use Blocker: {b.name}</Text>
+                  </TouchableOpacity>
+                ))}
+            </View>
+          )}
         </View>
       )}
 
@@ -544,16 +570,27 @@ export default function GameBoardScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.fieldScroll}>
             <View style={styles.fieldCards}>
               {me.field.map((card) => (
-                <CardThumb
-                  key={card.instanceId}
-                  card={card}
-                  colors={colors}
-                  rested={card.rested}
-                  don={card.attachedDon}
-                  highlight={selectedCard?.instanceId === card.instanceId || attackingCard?.instanceId === card.instanceId}
-                  onPress={() => handleFieldCardPress(card, "mine")}
-                  onLongPress={() => setDetailCard(card)}
-                />
+                <View key={card.instanceId} style={styles.fieldCardWrapper}>
+                  <CardThumb
+                    card={card}
+                    colors={colors}
+                    rested={card.rested}
+                    don={card.attachedDon}
+                    highlight={selectedCard?.instanceId === card.instanceId || attackingCard?.instanceId === card.instanceId}
+                    onPress={() => handleFieldCardPress(card, "mine")}
+                    onLongPress={() => setDetailCard(card)}
+                  />
+                  {/* Activate: Main button for field cards with such ability */}
+                  {isMyTurn && state.phase === "main" && !pendingAttack && !card.rested && card.keywords.some((k) => k.startsWith("Activate: Main")) && (
+                    <TouchableOpacity
+                      style={[styles.activateBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+                      onPress={() => doAction({ type: "activate_ability", instanceId: card.instanceId })}
+                      disabled={busy}
+                    >
+                      <Text style={[styles.activateBtnText, { color: colors.primary }]}>Use</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               ))}
               {me.field.length === 0 && (
                 <Text style={[styles.emptyField, { color: colors.mutedForeground }]}>Empty field</Text>

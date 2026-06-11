@@ -10,10 +10,9 @@ import type {
   PendingAttack,
 } from "./types.js";
 
-let _idCounter = 0;
 function generateId(): string {
-  _idCounter = (_idCounter + 1) % 1_000_000;
-  return `${Date.now()}-${_idCounter}`;
+  // Use timestamp + random chunk to avoid collisions across concurrent calls
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -24,6 +23,25 @@ function shuffle<T>(arr: T[]): T[] {
   }
   return a;
 }
+
+// Minimal data-driven keyword handlers. Handlers may modify and return a new GameState.
+const keywordHandlers: Record<
+  string,
+  (state: GameState, side: PlayerSide, card: CardInstance) => GameState | void
+> = {
+  Rush(state, side, card) {
+    // Rush: allow this card to attack this turn by clearing summonedThisTurn
+    const player = getPlayer(state, side);
+    const newField = player.field.map((c) => (c.instanceId === card.instanceId ? { ...c, summonedThisTurn: false } : c));
+    const updatedPlayer: PlayerState = { ...player, field: newField };
+    const newState = updatePlayer(state, side, updatedPlayer);
+    return addLog(newState, `${card.name} has Rush — can attack this turn!`);
+  },
+  "On Play"(state, side, card) {
+    // Placeholder for On Play effects; log for now
+    return addLog(state, `On Play triggered: ${card.name} → ${card.effectText ?? "(no text)"}`);
+  },
+};
 
 function makeInstance(card: DBCard): CardInstance {
   return {
@@ -118,13 +136,16 @@ function processRefresh(state: GameState): GameState {
   const side = state.activePlayer;
   const player = getPlayer(state, side);
 
-  let donReturned = player.leader.attachedDon + player.donRested;
+  // Sum all DON that should return to active at refresh:
+  // - DON attached to leader
+  // - DON attached to each field card
+  // - DON currently in rested/cost area (donRested)
   const leader: CardInstance = { ...player.leader, rested: false, attachedDon: 0, summonedThisTurn: false };
+  const field = player.field.map((c) => ({ ...c, rested: false, attachedDon: 0, summonedThisTurn: false }));
 
-  const field = player.field.map((c) => {
-    donReturned += c.attachedDon;
-    return { ...c, rested: false, attachedDon: 0, summonedThisTurn: false };
-  });
+  const attachedFromLeader = player.leader.attachedDon || 0;
+  const attachedFromField = player.field.reduce((s, c) => s + (c.attachedDon || 0), 0);
+  const donReturned = attachedFromLeader + attachedFromField + (player.donRested || 0);
 
   const updatedPlayer: PlayerState = {
     ...player,
@@ -191,6 +212,7 @@ function processDon(state: GameState): GameState {
 }
 
 function nextPhase(state: GameState): GameState {
+  // Turn end -> switch active player and execute start-of-turn phases
   if (state.phase === "end") {
     const nextPlayer = opponentSide(state.activePlayer);
     const newTurn = nextPlayer === "host" ? state.turn + 1 : state.turn;
@@ -215,20 +237,10 @@ function nextPhase(state: GameState): GameState {
     return newState;
   }
 
+  // Main -> End (attacks and plays happen inside Main according to rules)
   if (state.phase === "main") {
-    let newState: GameState = { ...state, phase: "battle" };
-    newState = addLog(newState, "Phase: BATTLE");
-    const opp = getPlayer(newState, opponentSide(newState.activePlayer));
-    const blockers = opp.field.filter((c) => c.keywords.includes("Blocker") && !c.rested);
-    if (blockers.length > 0) {
-      newState = addLog(newState, `Opponent has ${blockers.length} Blocker(s): ${blockers.map((b) => b.name).join(", ")}`);
-    }
-    return newState;
-  }
-
-  if (state.phase === "battle") {
-    let newState: GameState = { ...state, phase: "main" };
-    newState = addLog(newState, "Phase: MAIN");
+    let newState: GameState = { ...state, phase: "end" };
+    newState = addLog(newState, "Phase: END");
     return newState;
   }
 
@@ -377,9 +389,10 @@ export function processAction(
       const newHand = player.hand.filter((_, i) => i !== cardIdx);
       let updatedPlayer: PlayerState;
       const isFieldCard = card.cardType === "character" || card.cardType === "stage";
-
+      // create instance if field card
+      let instance: CardInstance | null = null;
       if (isFieldCard) {
-        const instance: CardInstance = { ...card, summonedThisTurn: true, rested: false };
+        instance = { ...card, summonedThisTurn: true, rested: false };
         updatedPlayer = {
           ...player,
           hand: newHand,
@@ -402,9 +415,21 @@ export function processAction(
       const destination = isFieldCard ? "field" : "trash";
       const effectHint = card.effectText ? ` [Effect: ${card.effectText}]` : "";
       newState = addLog(newState, `${sideLabel} played ${card.name} (cost ${cost}) → ${destination}.${effectHint}`);
-      if (card.keywords.includes("Rush")) {
-        newState = addLog(newState, `${card.name} has Rush — can attack this turn!`);
+
+      // Apply keyword handlers (if any)
+      for (const kw of card.keywords || []) {
+        const handler = keywordHandlers[kw];
+        if (handler) {
+          // pass the instance for field cards, otherwise pass a temporary instance-like object
+          const target = instance ?? ({ ...card, instanceId: generateId(), rested: false, attachedDon: 0, summonedThisTurn: false } as CardInstance);
+          const result = handler(newState, side, target);
+          if (result) newState = result;
+        } else {
+          // no handler: log presence for debugging
+          newState = addLog(newState, `${card.name} keyword present: ${kw}`);
+        }
       }
+
       return { state: newState };
     }
 
@@ -446,8 +471,8 @@ export function processAction(
 
     case "declare_attack": {
       if (notMyTurn) return { state, error: "Not your turn" };
-      if (state.phase !== "battle") {
-        return { state, error: "Can only attack in the Battle phase" };
+      if (state.phase !== "main") {
+        return { state, error: "Can only attack during the Main phase" };
       }
       if (state.turn === 1) {
         return { state, error: "Cannot attack on the first turn." };
@@ -504,6 +529,64 @@ export function processAction(
         `${side === "host" ? "Host" : "Guest"} attacks ${defenderName} with ${attackerCard.name} (${getEffectivePower(attackerCard)})! Defender may counter.`,
       );
       return { state: newState };
+    }
+
+    case "activate_blocker": {
+      const pending = state.pendingAttack;
+      if (!pending) return { state, error: "No pending attack to block" };
+      if (side !== pending.defenderSide) return { state, error: "Only the defender can activate blockers" };
+
+      const defender = getPlayer(state, side);
+      const idx = defender.field.findIndex((c) => c.instanceId === action.blockerInstanceId);
+      if (idx === -1) return { state, error: "Blocker not found on field" };
+      const blocker = defender.field[idx];
+      if (blocker.rested) return { state, error: "Blocker is already rested" };
+      if (!blocker.keywords.includes("Blocker")) return { state, error: "Card is not a Blocker" };
+
+      // Put blocker in rested position and redirect attack to it
+      const newField = defender.field.map((c, i) => (i === idx ? { ...c, rested: true } : c));
+      const updatedDef: PlayerState = { ...defender, field: newField };
+      let newState = updatePlayer(state, side, updatedDef);
+      const newPending: PendingAttack = { ...pending, targetInstanceId: blocker.instanceId };
+      newState = { ...newState, pendingAttack: newPending };
+      newState = addLog(newState, `${side === "host" ? "Host" : "Guest"} activated Blocker ${blocker.name} to intercept the attack.`);
+      return { state: newState };
+    }
+
+    case "activate_ability": {
+      if (notMyTurn) return { state, error: "Not your turn" };
+      if (state.phase !== "main") return { state, error: "Can only activate abilities in the Main phase" };
+
+      const player = getPlayer(state, side);
+      // ability can be on leader or field
+      let targetCard: CardInstance | undefined;
+      if (action.instanceId === "leader") {
+        targetCard = player.leader;
+      } else {
+        targetCard = player.field.find((c) => c.instanceId === action.instanceId);
+      }
+      if (!targetCard) return { state, error: "Ability target not found" };
+
+      // Only allow if card has Activate: Main keyword (basic check)
+      if (!targetCard.keywords.some((k) => k.startsWith("Activate: Main"))) {
+        return { state, error: "This card has no Activate: Main ability" };
+      }
+
+      // Mark card as rested (costs an action) and log; effect application is data-driven and not implemented here
+      if (action.instanceId === "leader") {
+        const newLeader = { ...player.leader, rested: true };
+        const updatedPlayer: PlayerState = { ...player, leader: newLeader };
+        let newState = updatePlayer(state, side, updatedPlayer);
+        newState = addLog(newState, `${side === "host" ? "Host" : "Guest"} activated ability on Leader ${newLeader.name}.`);
+        return { state: newState };
+      } else {
+        const newField = player.field.map((c) => (c.instanceId === action.instanceId ? { ...c, rested: true } : c));
+        const updatedPlayer: PlayerState = { ...player, field: newField };
+        let newState = updatePlayer(state, side, updatedPlayer);
+        const card = player.field.find((c) => c.instanceId === action.instanceId)!;
+        newState = addLog(newState, `${side === "host" ? "Host" : "Guest"} activated ability on ${card.name}.`);
+        return { state: newState };
+      }
     }
 
     case "declare_counter": {

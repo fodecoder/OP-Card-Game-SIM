@@ -2,7 +2,8 @@ export interface DBCard {
   id: number;
   cardNumber: string;
   name: string;
-  cardType: string;
+  // core type: leader | character | event | stage
+  cardType: "leader" | "character" | "event" | "stage";
   color: string;
   rarity: string;
   setCode: string;
@@ -11,7 +12,10 @@ export interface DBCard {
   counter: number | null;
   attribute: string | null;
   life: number | null;
-  cardTypes: string | null;
+  // legacy raw card types string (kept for backward compatibility)
+  cardTypes?: string | null;
+  // normalized array of subtypes (e.g. ["Straw Hat Crew", "Slash"])
+  subtypes: string[];
   effectText: string | null;
   triggerEffect: string | null;
   keywords: string[];
@@ -47,7 +51,7 @@ export interface PendingAttack {
   counterPower: number;
 }
 
-export type Phase = "refresh" | "draw" | "don" | "main" | "battle" | "end";
+export type Phase = "refresh" | "draw" | "don" | "main" | "end";
 export type PlayerSide = "host" | "guest";
 
 export interface GameState {
@@ -72,6 +76,8 @@ export type GameAction =
       targetSide: PlayerSide;
       targetInstanceId: string;
     }
+  | { type: "activate_blocker"; blockerInstanceId: string }
+  | { type: "activate_ability"; instanceId: string; abilityId?: string }
   | { type: "declare_counter"; cardInstanceIds: string[] }
   | { type: "resolve_attack" }
   | { type: "concede" };
