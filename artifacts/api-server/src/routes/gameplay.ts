@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, gamesTable, gameStatesTable, decksTable, deckCardsTable, cardsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAuth, type AuthRequest } from "../lib/auth";
+import { toGameEngineCard } from "../lib/cardMapper";
 import { initializeGame, processAction } from "@workspace/game-engine";
 import type { GameState, GameAction, PlayerSide } from "@workspace/game-engine";
 
@@ -13,12 +14,7 @@ async function loadDeckCards(deckId: number) {
     .from(deckCardsTable)
     .innerJoin(cardsTable, eq(deckCardsTable.cardId, cardsTable.id))
     .where(eq(deckCardsTable.deckId, deckId));
-  const cards = rows.map((r) => ({
-    ...r.card,
-    subtypes: r.card.subtypes ?? [],
-    keywords: r.card.keywords ?? [],
-  }));
-  return cards;
+  return rows.map((r) => toGameEngineCard(r.card));
 }
 
 router.post("/games/:id/initialize", requireAuth, async (req, res): Promise<void> => {

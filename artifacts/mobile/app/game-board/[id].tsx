@@ -851,6 +851,7 @@ const styles = StyleSheet.create({
   fieldRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   fieldScroll: { flex: 1 },
   fieldCards: { flexDirection: "row", gap: 6, paddingVertical: 2 },
+  fieldCardWrapper: { position: "relative" },
   emptyField: { fontSize: 10, fontStyle: "italic", alignSelf: "center", paddingHorizontal: 8 },
 
   trashBtn: { alignItems: "center", gap: 2, paddingHorizontal: 4 },
@@ -889,6 +890,9 @@ const styles = StyleSheet.create({
   pendingBanner: { borderTopWidth: 1, borderBottomWidth: 1, paddingHorizontal: 12, paddingVertical: 6 },
   pendingTitle: { fontSize: 12, fontWeight: "bold" },
   pendingSub: { fontSize: 10 },
+  blockerRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
+  blockerBtn: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5 },
+  blockerBtnText: { fontSize: 10, fontWeight: "bold" },
 
   log: { flex: 1, borderTopWidth: 1, borderBottomWidth: 1, paddingHorizontal: 8, paddingVertical: 4, maxHeight: 80 },
   logEntry: { fontSize: 10, lineHeight: 15 },
@@ -922,6 +926,17 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingHorizontal: 8, paddingVertical: 6, borderTopWidth: 1 },
   actionBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   actionBtnText: { fontSize: 12, fontWeight: "bold" },
+  activateBtn: {
+    position: "absolute",
+    left: 2,
+    right: 2,
+    bottom: 2,
+    borderWidth: 1,
+    borderRadius: 5,
+    paddingVertical: 2,
+    alignItems: "center",
+  },
+  activateBtnText: { fontSize: 9, fontWeight: "bold" },
 
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "center", alignItems: "center", padding: 20 },
   modalSheet: { width: "100%", maxWidth: 400, borderRadius: 16, borderWidth: 1, padding: 16, gap: 12 },

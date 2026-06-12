@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, gamesTable, usersTable, decksTable, gameStatesTable, deckCardsTable, cardsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireAuth, type AuthRequest } from "../lib/auth";
+import { toGameEngineCard } from "../lib/cardMapper";
 import { CreateGameBody, JoinGameBody } from "@workspace/api-zod";
 import { initializeGame } from "@workspace/game-engine";
 import type { GameState } from "@workspace/game-engine";
@@ -14,7 +15,7 @@ async function loadDeckCards(deckId: number) {
     .from(deckCardsTable)
     .innerJoin(cardsTable, eq(deckCardsTable.cardId, cardsTable.id))
     .where(eq(deckCardsTable.deckId, deckId));
-  return rows.map((r) => ({ ...r.card, keywords: r.card.keywords ?? [] }));
+  return rows.map((r) => toGameEngineCard(r.card));
 }
 
 async function formatGame(game: typeof gamesTable.$inferSelect) {
