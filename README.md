@@ -1,58 +1,59 @@
 # One Piece TCG Simulator
 
-Simulatore mobile cross-platform per One Piece Card Game, con card browser, deck builder, collection tracker, lobby online e modalita locale. La repo e organizzata come monorepo pnpm con app Expo, API Express, database Drizzle/PostgreSQL, client React Query generato da OpenAPI e un game engine condiviso.
+A cross-platform One Piece Card Game simulator with card browsing, deck building, collection tracking, online lobby flow, and local game mode. The repository is a pnpm monorepo with an Expo mobile app, Express API, Drizzle/PostgreSQL database layer, OpenAPI-generated React Query client, and a shared game engine.
 
-## Stato del progetto
+## Project Status
 
-Il progetto ha buone fondamenta: Expo Router, TypeScript strict, TanStack Query, OpenAPI-first codegen, Drizzle ORM e separazione chiara tra mobile, API, DB e game engine. Al momento sembra pero piu vicino a un prototipo avanzato/MVP che a una release production-ready.
+The project has solid foundations and is already shaped like a real product: Expo Router, TypeScript strict mode, TanStack Query, OpenAPI-first code generation, Drizzle ORM, and a separate game-engine package. It should still be treated as an advanced MVP rather than a production-ready release.
 
-Priorita tecniche consigliate:
+Recommended technical priorities:
 
-1. Spostare i token da AsyncStorage a storage sicuro, per esempio MMKV cifrato o SecureStore/MMKV in base ai requisiti di sicurezza.
-2. Sostituire i form manuali di login/register con React Hook Form + Zod, condividendo le regole con gli schema API.
-3. Eliminare `any` dai componenti e dagli handler di errore; usare `StyleProp<ViewStyle>` e narrowing sugli errori API.
-4. Migliorare accessibilita di bottoni, touch target e input con `accessibilityLabel`, `accessibilityRole` e stati disabilitati chiari.
-5. Standardizzare cache invalidation con TanStack Query invece di usare molti `refetch()` manuali dopo le mutation.
-6. Rimuovere fallback deboli per `SESSION_SECRET` in produzione e fallire esplicitamente se manca la variabile.
-7. Aggiungere test: unit test sul game engine, route API critiche e smoke test React Native con React Native Testing Library.
+1. Move mobile auth tokens out of AsyncStorage and into a safer storage strategy.
+2. Replace manual login/register form validation with React Hook Form + Zod.
+3. Remove remaining `any` usage from components and error handlers.
+4. Improve accessibility labels, roles, disabled states, and touch targets.
+5. Standardize TanStack Query invalidation after mutations.
+6. Require `SESSION_SECRET` in production instead of falling back to static defaults.
+7. Add tests for auth, deck building, card browsing, and game-engine behavior.
 
 ## Stack
 
 - Package manager: pnpm workspaces
 - Language: TypeScript strict
 - Mobile: Expo SDK 54, React Native 0.81, Expo Router 6
-- State/server data: TanStack Query
+- Server state: TanStack Query
 - API: Express 5
 - Database: PostgreSQL + Drizzle ORM
-- Validation/codegen: OpenAPI, Orval, Zod
-- Auth: JWT access token + refresh token persistito su DB
-- Game logic: package condiviso `@workspace/game-engine`
+- Validation and codegen: OpenAPI, Orval, Zod
+- Auth: JWT access token + refresh token persisted in DB
+- Game logic: shared `@workspace/game-engine` package
 
-## Struttura
+## Repository Layout
 
 ```text
-artifacts/mobile/           Expo app iOS, Android e web
-artifacts/api-server/       API Express
-artifacts/mockup-sandbox/   Sandbox Vite per mockup web
-lib/api-spec/               OpenAPI spec e configurazione Orval
-lib/api-client-react/       Hook React Query generati
-lib/api-zod/                Schema Zod generati
-lib/db/                     Schema e accesso DB Drizzle
-lib/game-engine/            Logica di gioco condivisa
-scripts/                    Script di supporto e seed dati
-attached_assets/            PDF regole e asset importati
+artifacts/mobile/           Expo app for iOS, Android, and web
+artifacts/api-server/       Express API server
+artifacts/mockup-sandbox/   Vite web mockup sandbox
+lib/api-spec/               OpenAPI spec and Orval config
+lib/api-client-react/       Generated React Query hooks
+lib/api-zod/                Generated Zod schemas
+lib/db/                     Drizzle schema and DB client
+lib/game-engine/            Shared game rules and state transitions
+scripts/                    Utility scripts and card seeding
+attached_assets/            Rule PDFs and imported assets
 ```
 
-## Prerequisiti
+## Prerequisites
 
-- Node compatibile con la repo
+- Node compatible with this workspace
 - pnpm
 - PostgreSQL
-- Expo tooling per sviluppo mobile
+- Expo tooling for local mobile development
+- Optional: Docker, if PostgreSQL is running in a container
 
-La repo usa `minimumReleaseAge` in `pnpm-workspace.yaml` per ridurre il rischio supply-chain. Evitare di disabilitarlo salvo emergenze controllate.
+The workspace uses `minimumReleaseAge` in `pnpm-workspace.yaml` to reduce npm supply-chain risk. Do not disable it unless there is a controlled emergency.
 
-## Variabili ambiente
+## Environment Variables
 
 API server:
 
@@ -62,135 +63,250 @@ DATABASE_URL=postgres://user:password@localhost:5432/op_tcg
 SESSION_SECRET=replace-with-a-long-random-secret
 ```
 
-Mobile:
+Mobile app:
 
 ```bash
 EXPO_PUBLIC_DOMAIN=localhost:3000
 ```
 
-Note:
+Notes:
 
-- In sviluppo, `artifacts/mobile/scripts/dev-start.cjs` imposta `EXPO_PUBLIC_DOMAIN` da `REPLIT_DEV_DOMAIN` o `localhost:3000`.
-- In produzione, evitare base URL vuoti e configurare sempre un dominio API esplicito.
-- `SESSION_SECRET` non dovrebbe mai avere fallback in un deployment reale.
+- `artifacts/mobile/scripts/dev-start.cjs` defaults `EXPO_PUBLIC_DOMAIN` to `REPLIT_DEV_DOMAIN` or `localhost:3000`.
+- `SESSION_SECRET` should always be configured in real deployments.
+- `EXPO_PUBLIC_DOMAIN` should point to the API host reachable by the mobile runtime. On a physical phone, `localhost` means the phone itself, not your development machine.
 
-## Comandi principali
+## Database Access
 
-Installazione:
+There is no `docker-compose.yml` in this repository, so access depends on how the PostgreSQL container was started. First identify the running container:
+
+```bash
+docker ps
+```
+
+If you know the DB user and database name:
+
+```bash
+docker exec -it <postgres-container> psql -U <user> -d <database>
+```
+
+Useful psql commands:
+
+```sql
+\dt
+\d cards
+select id, card_number, name, card_type, color, rarity, set_code from cards order by id limit 20;
+select * from decks order by id desc limit 10;
+select * from deck_cards limit 20;
+select * from user_collections limit 20;
+```
+
+If `psql` is installed locally and `DATABASE_URL` is set:
+
+```bash
+psql "$DATABASE_URL"
+```
+
+On PowerShell:
+
+```powershell
+$env:DATABASE_URL="postgres://user:password@localhost:5432/op_tcg"
+psql $env:DATABASE_URL
+```
+
+You can also use Drizzle Kit against the configured database:
+
+```bash
+pnpm --filter @workspace/db exec drizzle-kit studio --config ./drizzle.config.js
+```
+
+## Local Development
+
+Install dependencies:
 
 ```bash
 pnpm install
 ```
 
-Typecheck completo:
+Set environment variables in the current PowerShell session:
 
-```bash
-pnpm run typecheck
+```powershell
+$env:PORT="3000"
+$env:DATABASE_URL="postgres://user:password@localhost:5432/op_tcg"
+$env:SESSION_SECRET="replace-with-a-long-random-secret"
+$env:EXPO_PUBLIC_DOMAIN="localhost:3000"
 ```
 
-Build completa:
+Push the DB schema:
 
 ```bash
-pnpm run build
+pnpm --filter @workspace/db run push
 ```
 
-API server:
+Seed sample cards:
+
+```bash
+pnpm --filter @workspace/scripts run seed-cards
+```
+
+Start the API server:
 
 ```bash
 pnpm --filter @workspace/api-server run build
 pnpm --filter @workspace/api-server run start
 ```
 
-Mobile Expo:
+Start the Expo app in another terminal:
 
 ```bash
 pnpm --filter @workspace/mobile run dev
 ```
 
-Codegen API:
+For a physical device on the same network, use your machine LAN IP instead of localhost:
+
+```powershell
+$env:EXPO_PUBLIC_DOMAIN="192.168.1.20:3000"
+pnpm --filter @workspace/mobile run dev
+```
+
+## Common Commands
+
+Full typecheck:
+
+```bash
+pnpm run typecheck
+```
+
+Full build:
+
+```bash
+pnpm run build
+```
+
+Regenerate API clients from OpenAPI:
 
 ```bash
 pnpm --filter @workspace/api-spec run codegen
 ```
 
-Push schema database:
-
-```bash
-pnpm --filter @workspace/db run push
-```
-
-Seed carte:
-
-```bash
-pnpm --filter @workspace/scripts run seed-cards
-```
-
-Test game engine:
+Run game-engine tests:
 
 ```bash
 pnpm --filter @workspace/game-engine test
 ```
 
-## Flussi principali
+## Main Product Flows
 
-- Auth: registrazione, login, refresh token, logout, profilo utente.
-- Card browser: ricerca, filtro colore, dettaglio carta.
-- Deck builder: creazione deck, scelta leader, aggiunta/rimozione carte.
-- Collection tracker: copie possedute per carta.
-- Lobby: creazione stanza, join partita, selezione deck.
-- Local game: selezione deck player 1 e player 2 e avvio board locale.
-- Dashboard: statistiche, match recenti e quick actions.
+- Auth: register, login, token refresh, logout, current user.
+- Card browser: search, color filter, card detail.
+- Deck builder: create decks, select leader, add/remove cards.
+- Collection tracker: track owned copies of each card.
+- Lobby: create room, join room, select deck.
+- Local game: select player 1 and player 2 decks, then start the board.
+- Dashboard: stats, recent matches, and quick actions.
 
-## Architettura API
+## API Architecture
 
-`lib/api-spec/openapi.yaml` e la fonte di verita delle API. Orval genera:
+`lib/api-spec/openapi.yaml` is the source of truth for the API contract. Orval generates:
 
-- hook TanStack Query in `lib/api-client-react`
-- schema/tipi Zod in `lib/api-zod`
+- React Query hooks in `lib/api-client-react`
+- Zod schemas and types in `lib/api-zod`
 
-Quando cambia un endpoint:
+When an endpoint changes:
 
-1. Aggiornare `lib/api-spec/openapi.yaml`.
-2. Eseguire `pnpm --filter @workspace/api-spec run codegen`.
-3. Aggiornare route Express e chiamate mobile se necessario.
-4. Lanciare `pnpm run typecheck`.
+1. Update `lib/api-spec/openapi.yaml`.
+2. Run `pnpm --filter @workspace/api-spec run codegen`.
+3. Update the Express route and mobile usage if needed.
+4. Run `pnpm run typecheck`.
 
-## Note React Native
+## Card Variants
 
-- La navigazione usa Expo Router file-based in `artifacts/mobile/app`.
-- I token sono inizializzati in `artifacts/mobile/context/AuthContext.tsx`.
-- Il base URL API viene risolto da `artifacts/mobile/lib/url.ts`.
-- La UI usa `StyleSheet` e token colore in `artifacts/mobile/constants/colors.ts`.
-- Evitare `Link asChild` con stili complessi su React Native Web; la repo usa `router.push()` con `TouchableOpacity`.
+One Piece cards can have base and alternate printings. The desired serial format is:
 
-## Review tecnica sintetica
+```text
+XX-NUM (V.Y)
+```
 
-### Buone scelte
+Where:
 
-- Monorepo pulito con package separati per mobile, API, DB, API client e game engine.
-- OpenAPI-first: riduce drift tra backend e frontend.
-- TypeScript strict attivo nella mobile app.
-- Query client centralizzato e hook API generati.
-- Refresh token lato server con rotazione e persistenza su DB.
-- Componenti di loading, empty state ed error boundary gia presenti.
+- `XX` is the expansion prefix, such as `ST`, `OP`, `PRB`, or `P`.
+- `NUM` is the card number inside that expansion, such as `001` or `125`.
+- `(V.Y)` is an optional variant marker, where `Y` is a variant number from 1 to n.
 
-### Rischi da correggere
+Recommended model:
 
-- `artifacts/mobile/context/AuthContext.tsx` salva access token e refresh token in AsyncStorage. Questo e comodo ma non adeguato per token sensibili su mobile.
-- `artifacts/api-server/src/lib/auth.ts` usa fallback statici per `SESSION_SECRET`. In produzione questo puo invalidare la sicurezza dei JWT.
-- `artifacts/mobile/app/auth/login.tsx` e `register.tsx` validano i form manualmente e usano `catch (err: any)`.
-- Alcuni componenti usano `style?: any`, perdendo il vantaggio del type checking.
-- Molti handler mostrano solo `console.error`, senza feedback visibile o retry chiaro per l'utente.
-- Diversi `TouchableOpacity` non espongono label/role accessibili.
-- Alcune mutation fanno `refetch()` manuale; meglio usare `queryClient.invalidateQueries()` con query key stabili.
+- Keep gameplay identity separate from printing identity.
+- Use a canonical card identity for deck legality, copy limits, effects, and game-engine behavior.
+- Store individual printings/variants as selectable visual versions.
+- Deck entries and collection entries should reference the selected printing, while validation should count copies by canonical card identity.
 
-## Roadmap consigliata
+Current state:
 
-1. Hardening auth e secret management.
-2. Refactor form auth con React Hook Form + Zod.
-3. Tipizzazione componenti e rimozione `any`.
-4. Accessibilita e UX error states.
-5. Cache invalidation TanStack Query.
-6. Test minimi su auth, deck builder, card browser e game engine.
-7. Preparazione build mobile reale con profili ambiente separati.
+- `cards.card_number` is currently treated as unique.
+- `deck_cards` and `user_collections` currently store only `card_id + quantity`.
+- This means variants can work today only if each variant is inserted as a separate card row, but copy-limit validation would count them separately unless extra canonical identity fields are added.
+
+Suggested future schema:
+
+```text
+cards
+  id
+  canonical_card_number   -- OP01-001
+  print_code              -- OP01-001 or OP01-001 (V.1)
+  variant_code            -- null, V.1, V.2
+  variant_label           -- Base, Alternate Art, Manga, Parallel, etc.
+  image_url
+  gameplay/effect fields
+
+deck_cards
+  deck_id
+  card_id                 -- selected printing
+  quantity
+
+user_collections
+  user_id
+  card_id                 -- selected printing
+  quantity
+```
+
+Then deck validation should enforce max copies by `canonical_card_number`, not by `card_id`.
+
+## React Native Notes
+
+- Navigation uses Expo Router file-based routes in `artifacts/mobile/app`.
+- Auth state is initialized in `artifacts/mobile/context/AuthContext.tsx`.
+- API base URL resolution lives in `artifacts/mobile/lib/url.ts`.
+- UI uses `StyleSheet` and color tokens from `artifacts/mobile/constants/colors.ts`.
+- Avoid `Link asChild` with complex styles on React Native Web; the app uses `router.push()` with touchables.
+- Code comments should be written in English.
+
+## Technical Review Summary
+
+### Strengths
+
+- Clean package boundaries for mobile, API, DB, generated clients, and game logic.
+- OpenAPI-first API contract reduces frontend/backend drift.
+- TypeScript strict mode is enabled.
+- Generated TanStack Query hooks are already in use.
+- Server-side refresh token rotation is implemented.
+- Loading, empty, and error boundary components already exist.
+
+### Risks
+
+- Mobile auth tokens are stored in AsyncStorage.
+- Production auth secrets should not have static fallbacks.
+- Auth forms are manually validated and still use loose error handling.
+- Several components still use loose style typing.
+- Some user-facing errors are only logged with `console.error`.
+- Some touchables do not yet expose accessibility labels and roles.
+- Mutation cache handling is mostly manual `refetch()` instead of query invalidation.
+
+## Recommended Roadmap
+
+1. Harden auth storage and production secret handling.
+2. Add card variant support with canonical card identity.
+3. Refactor auth forms with React Hook Form + Zod.
+4. Improve accessibility and visible error states.
+5. Standardize TanStack Query invalidation.
+6. Add focused tests for auth, deck builder, card browser, and game engine.
+7. Prepare separate development, staging, and production mobile build profiles.
 

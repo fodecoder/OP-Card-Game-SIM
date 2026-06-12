@@ -37,6 +37,12 @@ function apiBase(): string {
   return getApiBaseUrl();
 }
 
+function resolveCardImageUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  return `${apiBase()}${url}`;
+}
+
 async function fetchGameState(gameId: number, token: string | null) {
   const res = await fetch(`${apiBase()}/api/games/${gameId}/state`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -93,6 +99,8 @@ function CardThumb({
   don?: number;
   colors: ReturnType<typeof useColors>;
 }) {
+  const imageUrl = resolveCardImageUrl(card.imageUrl);
+
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -104,8 +112,8 @@ function CardThumb({
         rested && styles.cardRested,
       ]}
     >
-      {card.imageUrl ? (
-        <Image source={{ uri: card.imageUrl }} style={styles.cardImg} resizeMode="cover" />
+      {imageUrl ? (
+        <Image source={{ uri: imageUrl }} style={styles.cardImg} resizeMode="cover" />
       ) : (
         <View style={[styles.cardImgPlaceholder, { backgroundColor: colors.secondary }]}>
           <Text style={[styles.cardImgText, { color: colors.mutedForeground }]} numberOfLines={3}>
@@ -142,6 +150,8 @@ function HandCard({
   highlighted?: boolean;
   colors: ReturnType<typeof useColors>;
 }) {
+  const imageUrl = resolveCardImageUrl(card.imageUrl);
+
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -154,8 +164,8 @@ function HandCard({
         },
       ]}
     >
-      {card.imageUrl ? (
-        <Image source={{ uri: card.imageUrl }} style={styles.handCardImg} resizeMode="cover" />
+      {imageUrl ? (
+        <Image source={{ uri: imageUrl }} style={styles.handCardImg} resizeMode="cover" />
       ) : (
         <View style={[styles.handCardImgPlaceholder, { backgroundColor: colors.secondary }]}>
           <Text style={[styles.handCardText, { color: colors.mutedForeground }]} numberOfLines={3}>
@@ -180,13 +190,15 @@ function HandCard({
 }
 
 function CardDetailModal({ card, onClose, colors }: { card: CardInstance; onClose: () => void; colors: ReturnType<typeof useColors> }) {
+  const imageUrl = resolveCardImageUrl(card.imageUrl);
+
   return (
     <Modal transparent animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={onClose}>
         <TouchableOpacity activeOpacity={1} style={[styles.modalSheet, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => {}}>
           <View style={styles.modalInner}>
-            {card.imageUrl ? (
-              <Image source={{ uri: card.imageUrl }} style={styles.modalImg} resizeMode="contain" />
+            {imageUrl ? (
+              <Image source={{ uri: imageUrl }} style={styles.modalImg} resizeMode="contain" />
             ) : (
               <View style={[styles.modalImgPlaceholder, { backgroundColor: colors.secondary }]}>
                 <Text style={[styles.modalImgText, { color: colors.foreground }]}>{card.name}</Text>
@@ -312,6 +324,8 @@ export default function GameBoardScreen() {
   const pendingAttack = state.pendingAttack;
 
   const sortedHand = sortHand(me.hand);
+  const opponentLeaderImageUrl = resolveCardImageUrl(opp.leader.imageUrl);
+  const myLeaderImageUrl = resolveCardImageUrl(me.leader.imageUrl);
 
   function handleHandCardPress(card: CardInstance) {
     if (busy) return;
@@ -449,8 +463,8 @@ export default function GameBoardScreen() {
               opp.leader.rested && styles.cardRested,
             ]}
           >
-            {opp.leader.imageUrl ? (
-              <Image source={{ uri: opp.leader.imageUrl }} style={styles.leaderImg} resizeMode="cover" />
+            {opponentLeaderImageUrl ? (
+              <Image source={{ uri: opponentLeaderImageUrl }} style={styles.leaderImg} resizeMode="cover" />
             ) : (
               <View style={[styles.leaderPlaceholder, { backgroundColor: colors.secondary }]}>
                 <Text style={[styles.leaderName, { color: colors.foreground }]} numberOfLines={2}>{opp.leader.name}</Text>
@@ -461,6 +475,11 @@ export default function GameBoardScreen() {
                 {(opp.leader.power ?? 0) + opp.leader.attachedDon * 1000}
               </Text>
             </View>
+            {opp.leader.attachedDon > 0 && (
+              <View style={[styles.leaderDonBadge, { backgroundColor: colors.primary }]}>
+                <Text style={styles.leaderDonText}>+{opp.leader.attachedDon}</Text>
+              </View>
+            )}
             {(attackingCard && canAttack) && (
               <View style={[styles.attackTarget, { backgroundColor: colors.destructive }]}>
                 <Text style={styles.attackTargetText}>ATTACK</Text>
@@ -553,8 +572,8 @@ export default function GameBoardScreen() {
               me.leader.rested && styles.cardRested,
             ]}
           >
-            {me.leader.imageUrl ? (
-              <Image source={{ uri: me.leader.imageUrl }} style={styles.leaderImg} resizeMode="cover" />
+            {myLeaderImageUrl ? (
+              <Image source={{ uri: myLeaderImageUrl }} style={styles.leaderImg} resizeMode="cover" />
             ) : (
               <View style={[styles.leaderPlaceholder, { backgroundColor: colors.secondary }]}>
                 <Text style={[styles.leaderName, { color: colors.foreground }]} numberOfLines={2}>{me.leader.name}</Text>
@@ -565,6 +584,11 @@ export default function GameBoardScreen() {
                 {(me.leader.power ?? 0) + me.leader.attachedDon * 1000}
               </Text>
             </View>
+            {me.leader.attachedDon > 0 && (
+              <View style={[styles.leaderDonBadge, { backgroundColor: colors.primary }]}>
+                <Text style={styles.leaderDonText}>+{me.leader.attachedDon}</Text>
+              </View>
+            )}
           </TouchableOpacity>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.fieldScroll}>
@@ -872,6 +896,18 @@ const styles = StyleSheet.create({
   leaderName: { fontSize: 8, textAlign: "center", fontWeight: "bold" },
   leaderPowerBadge: { position: "absolute", bottom: 2, right: 2, paddingHorizontal: 3, paddingVertical: 1, borderRadius: 4 },
   leaderPowerText: { fontSize: 9, fontWeight: "bold" },
+  leaderDonBadge: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 4,
+  },
+  leaderDonText: { color: "#fff", fontSize: 9, fontWeight: "bold" },
   attackTarget: { position: "absolute", bottom: 0, left: 0, right: 0, paddingVertical: 2, alignItems: "center" },
   attackTargetText: { color: "#fff", fontSize: 8, fontWeight: "bold" },
 
