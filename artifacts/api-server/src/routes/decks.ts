@@ -8,6 +8,7 @@ import {
   UpdateDeckBody,
   AddCardToDeckBody,
 } from "@workspace/api-zod";
+import { validateStoredDeck } from "../lib/deckRules";
 
 const router: IRouter = Router();
 
@@ -281,6 +282,20 @@ router.patch("/decks/:id", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
+  if (parsed.data.leaderId !== undefined) {
+    const [leader] = await db
+      .select()
+      .from(cardsTable)
+      .where(eq(cardsTable.id, parsed.data.leaderId));
+    if (!leader || leader.cardType.toLowerCase() !== "leader") {
+      res.status(400).json({ error: "The selected card is not a Leader." });
+      return;
+    }
+    await db
+      .delete(deckCardsTable)
+      .where(and(eq(deckCardsTable.deckId, id), eq(deckCardsTable.cardId, leader.id)));
+  }
+
   const [updated] = await db
     .update(decksTable)
     .set({
@@ -355,15 +370,9 @@ router.post("/decks/:id/cards", requireAuth, async (req, res): Promise<void> => 
       return;
     }
 
-    if (card.restriction === "banned") {
-      res.status(400).json({ error: `${card.name} is banned and cannot be added to decks.` });
-      return;
-    }
-    const maxQty =
-      card.restriction === "limited_1" ? 1 : card.restriction === "limited_2" ? 2 : 4;
-    if (quantity > maxQty) {
+    if (card.cardType.toLowerCase() === "leader") {
       res.status(400).json({
-        error: `Cannot add more than ${maxQty} copies of ${card.name}.`,
+        error: "Leader cards must be selected in the Leader slot and cannot enter the main deck.",
       });
       return;
     }
@@ -410,7 +419,8 @@ router.post("/decks/:id/cards", requireAuth, async (req, res): Promise<void> => 
     .where(eq(deckCardsTable.deckId, deckId));
 
   const totalCards = allDeckCards.reduce((sum, dc) => sum + dc.quantity, 0);
-  const isValid = totalCards === 50;
+  const { validation } = await validateStoredDeck(deckId, "extra");
+  const isValid = validation.valid;
 
   await db
     .update(decksTable)
@@ -476,7 +486,8 @@ router.delete("/decks/:id/cards/:cardId", requireAuth, async (req, res): Promise
     .where(eq(deckCardsTable.deckId, deckId));
 
   const totalCards = allDeckCards.reduce((sum, dc) => sum + dc.quantity, 0);
-  const isValid = totalCards === 50;
+  const { validation } = await validateStoredDeck(deckId, "extra");
+  const isValid = validation.valid;
 
   await db
     .update(decksTable)

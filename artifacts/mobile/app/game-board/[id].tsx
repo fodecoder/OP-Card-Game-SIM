@@ -8,18 +8,21 @@ import {
   Alert,
   Image,
   Modal,
+  Animated,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useColors } from "@/hooks/useColors";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { Feather } from "@expo/vector-icons";
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { GameState, CardInstance, PlayerSide, GameAction } from "@workspace/game-engine";
 import { getApiBaseUrl } from "@/lib/url";
+import { LinearGradient } from "expo-linear-gradient";
 
 const TYPE_ORDER: Record<string, number> = { character: 0, event: 1, stage: 2, leader: 3 };
+const AnimatedGradient = Animated.createAnimatedComponent(LinearGradient);
 
 function sortHand(hand: CardInstance[]): CardInstance[] {
   return [...hand].sort((a, b) => {
@@ -258,6 +261,16 @@ export default function GameBoardScreen() {
   const [counterSelectedIds, setCounterSelectedIds] = useState<string[]>([]);
   const [showTrash, setShowTrash] = useState<PlayerSide | null>(null);
   const logRef = useRef<ScrollView>(null);
+  const boardEntrance = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.spring(boardEntrance, {
+      toValue: 1,
+      tension: 45,
+      friction: 9,
+      useNativeDriver: true,
+    }).start();
+  }, [boardEntrance]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["game-state", gameId],
@@ -322,6 +335,10 @@ export default function GameBoardScreen() {
   const isDefenderInPending = state.pendingAttack?.defenderSide === perspective;
   const isAttackerInPending = state.pendingAttack?.attackerSide === perspective;
   const pendingAttack = state.pendingAttack;
+  const pendingEffect = state.pendingEffect;
+  const pendingTrash = pendingEffect?.operations[0]?.type === "trash_from_hand"
+    ? pendingEffect.operations[0]
+    : null;
 
   const sortedHand = sortHand(me.hand);
   const opponentLeaderImageUrl = resolveCardImageUrl(opp.leader.imageUrl);
@@ -329,6 +346,13 @@ export default function GameBoardScreen() {
 
   function handleHandCardPress(card: CardInstance) {
     if (busy) return;
+    if (pendingTrash && pendingEffect?.side === perspective) {
+      const ids = counterSelectedIds.includes(card.instanceId)
+        ? counterSelectedIds.filter((value) => value !== card.instanceId)
+        : [...counterSelectedIds, card.instanceId].slice(-pendingTrash.count);
+      setCounterSelectedIds(ids);
+      return;
+    }
     if (isDefenderInPending && pendingAttack) {
       const ctr = card.counter ?? 0;
       if (ctr === 0) return;
@@ -396,7 +420,25 @@ export default function GameBoardScreen() {
   const passPhaseLabel = state.phase === "main" ? "End Phase" : "Pass Phase";
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+    <AnimatedGradient
+      colors={["#07111f", colors.background, "#160b22"]}
+      style={[
+        styles.root,
+        {
+          paddingTop: insets.top,
+          paddingBottom: insets.bottom,
+          opacity: boardEntrance,
+          transform: [{
+            translateY: boardEntrance.interpolate({
+              inputRange: [0, 1],
+              outputRange: [12, 0],
+            }),
+          }],
+        },
+      ]}
+    >
+      <View style={styles.boardGlowTop} pointerEvents="none" />
+      <View style={styles.boardGlowBottom} pointerEvents="none" />
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
@@ -663,6 +705,35 @@ export default function GameBoardScreen() {
 
       {/* Action buttons */}
       <View style={[styles.actions, { borderTopColor: colors.border }]}>
+        {state.phase === "setup" && !me.setupComplete && (
+          <>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: colors.primary }]}
+              onPress={() => doAction({ type: "keep_hand" })}
+              disabled={busy || (perspective === "guest" && !state.host.setupComplete)}
+            >
+              <Text style={[styles.actionBtnText, { color: colors.primaryForeground }]}>Keep Hand</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.primary, borderWidth: 1 }]}
+              onPress={() => doAction({ type: "mulligan" })}
+              disabled={busy || (perspective === "guest" && !state.host.setupComplete)}
+            >
+              <Text style={[styles.actionBtnText, { color: colors.primary }]}>Mulligan</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        {pendingTrash && pendingEffect?.side === perspective && (
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: colors.destructive }]}
+            onPress={() => doAction({ type: "resolve_effect", cardInstanceIds: counterSelectedIds })}
+            disabled={busy || counterSelectedIds.length !== pendingTrash.count}
+          >
+            <Text style={[styles.actionBtnText, { color: "#fff" }]}>
+              Trash {pendingTrash.count} selected
+            </Text>
+          </TouchableOpacity>
+        )}
         {/* Pending attack actions */}
         {pendingAttack && isDefenderInPending && (
           <>
@@ -845,12 +916,30 @@ export default function GameBoardScreen() {
       {detailCard && (
         <CardDetailModal card={detailCard} onClose={() => setDetailCard(null)} colors={colors} />
       )}
-    </View>
+    </AnimatedGradient>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  boardGlowTop: {
+    position: "absolute",
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: "rgba(37, 99, 235, 0.16)",
+    top: -120,
+    right: -80,
+  },
+  boardGlowBottom: {
+    position: "absolute",
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    backgroundColor: "rgba(147, 51, 234, 0.13)",
+    bottom: -160,
+    left: -100,
+  },
   center: { flex: 1, justifyContent: "center", alignItems: "center", gap: 16 },
   errorText: { fontSize: 16, textAlign: "center", paddingHorizontal: 24 },
   btn: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
@@ -882,7 +971,15 @@ const styles = StyleSheet.create({
   trashCount: { fontSize: 9 },
 
   lifeRow: { flexDirection: "row", gap: 4, flexWrap: "wrap" },
-  lifeCard: { width: 14, height: 20, borderRadius: 3, opacity: 0.85 },
+  lifeCard: {
+    width: 16,
+    height: 23,
+    borderRadius: 3,
+    opacity: 0.9,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.5)",
+    transform: [{ rotate: "-4deg" }],
+  },
   noLife: { fontSize: 10, fontWeight: "bold" },
 
   donBadge: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, alignItems: "center" },

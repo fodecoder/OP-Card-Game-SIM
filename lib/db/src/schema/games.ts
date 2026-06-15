@@ -8,6 +8,7 @@ export const gamesTable = pgTable("games", {
   id: serial("id").primaryKey(),
   status: text("status").notNull().default("waiting"),
   isPrivate: boolean("is_private").notNull().default(false),
+  ruleset: text("ruleset").notNull().default("standard"),
   hostId: integer("host_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
   hostDeckId: integer("host_deck_id").references(() => decksTable.id, { onDelete: "set null" }),
   guestId: integer("guest_id").references(() => usersTable.id, { onDelete: "set null" }),

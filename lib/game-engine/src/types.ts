@@ -20,6 +20,7 @@ export interface DBCard {
   triggerEffect: string | null;
   keywords: string[];
   imageUrl: string | null;
+  restriction?: string | null;
 }
 
 export interface CardInstance extends DBCard {
@@ -41,6 +42,8 @@ export interface PlayerState {
   donDeck: number;
   donActive: number;
   donRested: number;
+  mulliganUsed: boolean;
+  setupComplete: boolean;
 }
 
 export interface PendingAttack {
@@ -49,10 +52,28 @@ export interface PendingAttack {
   defenderSide: PlayerSide;
   targetInstanceId: string;
   counterPower: number;
+  damage: number;
+  banish: boolean;
 }
 
-export type Phase = "refresh" | "draw" | "don" | "main" | "end";
+export type Phase = "setup" | "refresh" | "draw" | "don" | "main" | "end";
 export type PlayerSide = "host" | "guest";
+export type GameFormat = "local" | "standard" | "extra";
+
+export type EffectOperation =
+  | { type: "draw"; count: number }
+  | {
+      type: "trash_from_hand";
+      count: number;
+      selectedInstanceIds?: string[];
+    };
+
+export interface PendingEffect {
+  sourceInstanceId: string;
+  sourceName: string;
+  side: PlayerSide;
+  operations: EffectOperation[];
+}
 
 export interface GameState {
   turn: number;
@@ -63,6 +84,7 @@ export interface GameState {
   winner: PlayerSide | null;
   log: string[];
   pendingAttack: PendingAttack | null;
+  pendingEffect: PendingEffect | null;
 }
 
 export type GameAction =
@@ -78,6 +100,9 @@ export type GameAction =
     }
   | { type: "activate_blocker"; blockerInstanceId: string }
   | { type: "activate_ability"; instanceId: string; abilityId?: string }
+  | { type: "keep_hand" }
+  | { type: "mulligan" }
+  | { type: "resolve_effect"; cardInstanceIds?: string[] }
   | { type: "declare_counter"; cardInstanceIds: string[] }
   | { type: "resolve_attack" }
   | { type: "concede" };

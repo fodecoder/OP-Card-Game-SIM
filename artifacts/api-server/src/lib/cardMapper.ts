@@ -36,6 +36,6 @@ export function toGameEngineCard(card: Card): DBCard {
     triggerEffect: card.triggerEffect,
     keywords: card.keywords ?? [],
     imageUrl: card.imageUrl,
+    restriction: card.restriction,
   };
 }
-

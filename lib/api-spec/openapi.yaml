@@ -1023,6 +1023,9 @@ components:
           type: string
         isPrivate:
           type: boolean
+        ruleset:
+          type: string
+          enum: [local, standard, extra]
         hostId:
           type: integer
         hostUsername:
@@ -1057,6 +1060,10 @@ components:
           type: boolean
         isLocal:
           type: boolean
+        ruleset:
+          type: string
+          enum: [standard, extra]
+          default: standard
         guestDeckId:
           type: integer
 

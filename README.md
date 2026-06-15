@@ -59,7 +59,7 @@ API server:
 
 ```bash
 PORT=3000
-DATABASE_URL=postgres://user:password@localhost:5432/op_tcg
+DATABASE_URL=postgres://<real-user>:<real-password>@localhost:<published-port>/<real-database>
 SESSION_SECRET=replace-with-a-long-random-secret
 ```
 
@@ -82,6 +82,48 @@ There is no `docker-compose.yml` in this repository, so access depends on how th
 ```bash
 docker ps
 ```
+
+Inspect the container configuration to find its PostgreSQL user, database, and published host port:
+
+```bash
+docker inspect <postgres-container>
+docker exec <postgres-container> printenv POSTGRES_USER
+docker exec <postgres-container> printenv POSTGRES_DB
+```
+
+Docker Desktop also shows these values under the container's **Inspect** and **Ports** tabs. The password may be stored in `POSTGRES_PASSWORD`, a Docker secret, or the command/script that originally created the container.
+
+For the official `postgres` Docker image, a missing `POSTGRES_USER` defaults to
+`postgres`. A PostgreSQL URL would therefore start with:
+
+```text
+postgres://postgres:<real-password>@localhost:<published-port>/<real-database>
+```
+
+If `POSTGRES_DB` is also missing, it normally defaults to the selected user
+name, so the database is usually `postgres`.
+
+These environment variables are only used when the data directory is first
+initialized. If the container uses an existing volume, changing
+`POSTGRES_USER`, `POSTGRES_PASSWORD`, or `POSTGRES_DB` later does not change the
+credentials stored in that volume.
+
+Example only:
+
+```text
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=my-local-password
+POSTGRES_DB=op_tcg
+PORTS=0.0.0.0:5432->5432/tcp
+```
+
+This produces:
+
+```bash
+DATABASE_URL=postgres://postgres:my-local-password@localhost:5432/op_tcg
+```
+
+Do not copy the literal `user`, `password`, or `op_tcg` placeholders unless those are the actual values configured in your container.
 
 If you know the DB user and database name:
 
@@ -131,7 +173,7 @@ Set environment variables in the current PowerShell session:
 
 ```powershell
 $env:PORT="3000"
-$env:DATABASE_URL="postgres://user:password@localhost:5432/op_tcg"
+$env:DATABASE_URL="postgres://<real-user>:<real-password>@localhost:<published-port>/<real-database>"
 $env:SESSION_SECRET="replace-with-a-long-random-secret"
 $env:EXPO_PUBLIC_DOMAIN="localhost:3000"
 ```
@@ -160,6 +202,42 @@ Start the Expo app in another terminal:
 ```bash
 pnpm --filter @workspace/mobile run dev
 ```
+
+### Database Authentication Troubleshooting
+
+PostgreSQL error `28P01` means that the server was reached, but the username or password is wrong:
+
+```text
+password authentication failed for user "user"
+```
+
+Verify the connection before running Drizzle or the seed:
+
+```powershell
+psql $env:DATABASE_URL -c "select current_user, current_database();"
+```
+
+The repository also provides a connection diagnostic that does not print the
+password:
+
+```powershell
+pnpm --filter @workspace/db run check
+```
+
+If `psql` is not installed locally, run the check inside the container:
+
+```bash
+docker exec -it <postgres-container> psql -U <real-user> -d <real-database> -c "select current_user, current_database();"
+```
+
+Then run:
+
+```bash
+pnpm --filter @workspace/db run push
+pnpm --filter @workspace/scripts run seed-cards
+```
+
+The API now verifies the database connection before opening its HTTP port. Invalid credentials cause startup to fail immediately with a database configuration message instead of returning an HTML 500 error during login or registration.
 
 For a physical device on the same network, use your machine LAN IP instead of localhost:
 
@@ -203,6 +281,66 @@ pnpm --filter @workspace/game-engine test
 - Lobby: create room, join room, select deck.
 - Local game: select player 1 and player 2 decks, then start the board.
 - Dashboard: stats, recent matches, and quick actions.
+
+## Game Rules and Formats
+
+Game creation validates decks on the server immediately before a room is
+created, joined, or initialized:
+
+- `local`: requires one Leader and at least one main-deck card, but does not
+  apply tournament color, copy, rotation, or ban-list rules.
+- `standard`: applies the April 2026 Standard Regulation card pool (Blocks
+  2-5), the 50-card rule, Leader colors, copy limits, banned cards, and banned
+  pairs.
+- `extra`: allows cards from every block while retaining the tournament deck
+  construction rules and banned/restricted list.
+
+The competitive list is based on the official rules effective April 10, 2026.
+When Bandai revises it, update `BANNED_CARDS` and `BANNED_PAIRS` in
+`lib/game-engine/src/deck-rules.ts`.
+
+## Extending Keywords and Effects
+
+Keywords that change core battle rules belong in the engine, not in the UI.
+`Rush`, `Blocker`, `Double Attack`, and `Banish` are currently interpreted
+directly by `lib/game-engine/src/engine.ts`. Add another keyword by normalizing
+its spelling in card data and checking it at the rule point it modifies.
+
+Ordered card effects are represented as an operation queue. The generic parser
+currently recognizes:
+
+```text
+draw N card(s)
+trash/discard N card(s) from your hand
+```
+
+The parser records operations in textual order. Therefore:
+
+```text
+Trash 1 card from your hand, then draw 1 card.
+```
+
+requires a hand selection before drawing, while:
+
+```text
+Draw 1 card, then trash 1 card from your hand.
+```
+
+draws first and then blocks play until the player selects a card to trash.
+
+To add a new reusable operation:
+
+1. Add a variant to `EffectOperation` in `lib/game-engine/src/types.ts`.
+2. Parse the phrase in `parseOrderedEffects`.
+3. Resolve it in `continuePendingEffect`, pausing with `pendingEffect` when
+   player input is required.
+4. Add the corresponding selection control to the game board.
+5. Cover both operation orderings with an engine test.
+
+Effects involving targets, searches, replacement effects, optional costs, or
+moving cards to the bottom of a deck should use explicit typed operations
+rather than broad text matching. Card-specific effects that have not yet been
+modeled are logged but are not silently treated as resolved.
 
 ## API Architecture
 
@@ -309,4 +447,3 @@ Then deck validation should enforce max copies by `canonical_card_number`, not b
 5. Standardize TanStack Query invalidation.
 6. Add focused tests for auth, deck builder, card browser, and game engine.
 7. Prepare separate development, staging, and production mobile build profiles.
-

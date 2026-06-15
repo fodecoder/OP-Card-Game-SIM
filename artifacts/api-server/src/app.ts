@@ -4,6 +4,7 @@ import pinoHttp from "pino-http";
 import path from "path";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { apiErrorHandler } from "./lib/errors";
 
 const app: Express = express();
 
@@ -32,5 +33,6 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api/static", express.static(path.join(process.cwd(), "public")));
 app.use("/api", router);
+app.use(apiErrorHandler);
 
 export default app;

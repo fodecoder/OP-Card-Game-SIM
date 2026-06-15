@@ -1,21 +1,12 @@
 import { Router, type IRouter } from "express";
-import { db, gamesTable, gameStatesTable, decksTable, deckCardsTable, cardsTable } from "@workspace/db";
+import { db, gamesTable, gameStatesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAuth, type AuthRequest } from "../lib/auth";
-import { toGameEngineCard } from "../lib/cardMapper";
+import { validateStoredDeck } from "../lib/deckRules";
 import { initializeGame, processAction } from "@workspace/game-engine";
 import type { GameState, GameAction, PlayerSide } from "@workspace/game-engine";
 
 const router: IRouter = Router();
-
-async function loadDeckCards(deckId: number) {
-  const rows = await db
-    .select({ card: cardsTable })
-    .from(deckCardsTable)
-    .innerJoin(cardsTable, eq(deckCardsTable.cardId, cardsTable.id))
-    .where(eq(deckCardsTable.deckId, deckId));
-  return rows.map((r) => toGameEngineCard(r.card));
-}
 
 router.post("/games/:id/initialize", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as unknown as AuthRequest).userId;
@@ -41,17 +32,18 @@ router.post("/games/:id/initialize", requireAuth, async (req, res): Promise<void
     return;
   }
 
-  const [hostCards, guestCards] = await Promise.all([
-    loadDeckCards(game.hostDeckId),
-    loadDeckCards(game.guestDeckId),
+  const format = game.ruleset === "extra" ? "extra" : game.ruleset === "local" ? "local" : "standard";
+  const [hostResult, guestResult] = await Promise.all([
+    validateStoredDeck(game.hostDeckId, format),
+    validateStoredDeck(game.guestDeckId, format),
   ]);
 
-  if (hostCards.length === 0) {
-    res.status(400).json({ error: "Host deck is empty" });
+  if (!hostResult.validation.valid) {
+    res.status(400).json({ error: `Host deck: ${hostResult.validation.errors.join(" ")}` });
     return;
   }
-  if (guestCards.length === 0) {
-    res.status(400).json({ error: "Guest deck is empty" });
+  if (!guestResult.validation.valid) {
+    res.status(400).json({ error: `Guest deck: ${guestResult.validation.errors.join(" ")}` });
     return;
   }
 
@@ -60,10 +52,10 @@ router.post("/games/:id/initialize", requireAuth, async (req, res): Promise<void
     gameState = initializeGame(
       game.hostId,
       game.hostDeckId,
-      hostCards,
+      hostResult.loaded.engineCards,
       game.guestId,
       game.guestDeckId,
-      guestCards,
+      guestResult.loaded.engineCards,
     );
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Failed to initialize game";

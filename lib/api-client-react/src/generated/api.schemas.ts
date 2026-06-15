@@ -211,10 +211,20 @@ export interface CollectionCardInput {
   quantity: number;
 }
 
+export type GameRuleset = typeof GameRuleset[keyof typeof GameRuleset];
+
+
+export const GameRuleset = {
+  local: 'local',
+  standard: 'standard',
+  extra: 'extra',
+} as const;
+
 export interface Game {
   id: number;
   status: string;
   isPrivate?: boolean;
+  ruleset?: GameRuleset;
   hostId: number;
   hostUsername: string;
   /** @nullable */
@@ -234,10 +244,19 @@ export interface Game {
   endedAt?: string | null;
 }
 
+export type GameInputRuleset = typeof GameInputRuleset[keyof typeof GameInputRuleset];
+
+
+export const GameInputRuleset = {
+  standard: 'standard',
+  extra: 'extra',
+} as const;
+
 export interface GameInput {
   deckId: number;
   isPrivate?: boolean;
   isLocal?: boolean;
+  ruleset?: GameInputRuleset;
   guestDeckId?: number;
 }
 

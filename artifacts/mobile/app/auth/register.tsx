@@ -8,6 +8,7 @@ import { Feather } from "@expo/vector-icons";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import { getApiErrorMessage } from "@/lib/apiError";
 
 export default function RegisterScreen() {
   const [username, setUsername] = useState("");
@@ -37,8 +38,8 @@ export default function RegisterScreen() {
         response.user
       );
       router.replace("/(tabs)");
-    } catch (err: any) {
-      setError(err?.data?.error || err?.message || "Failed to register. Please try again.");
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, "Failed to register. Please try again."));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   };

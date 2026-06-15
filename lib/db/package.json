@@ -8,6 +8,7 @@
     "./schema": "./src/schema/index.ts"
   },
   "scripts": {
+    "check": "node ./check-connection.mjs",
     "push": "drizzle-kit push --config ./drizzle.config.js",
     "push-force": "drizzle-kit push --force --config ./drizzle.config.js"
   },

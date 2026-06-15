@@ -21,6 +21,8 @@ export * from './deckWithCards';
 export * from './errorResponse';
 export * from './game';
 export * from './gameInput';
+export * from './gameInputRuleset';
+export * from './gameRuleset';
 export * from './getCollectionParams';
 export * from './healthStatus';
 export * from './joinGameInput';

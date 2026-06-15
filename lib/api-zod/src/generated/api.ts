@@ -479,6 +479,7 @@ export const ListGamesResponseItem = zod.object({
   "id": zod.number(),
   "status": zod.string(),
   "isPrivate": zod.boolean().optional(),
+  "ruleset": zod.enum(['local', 'standard', 'extra']).optional(),
   "hostId": zod.number(),
   "hostUsername": zod.string(),
   "hostDeckId": zod.number().nullish(),
@@ -496,10 +497,13 @@ export const ListGamesResponse = zod.array(ListGamesResponseItem)
 /**
  * @summary Create a new game room
  */
+export const createGameBodyRulesetDefault = `standard`;
+
 export const CreateGameBody = zod.object({
   "deckId": zod.number(),
   "isPrivate": zod.boolean().optional(),
   "isLocal": zod.boolean().optional(),
+  "ruleset": zod.enum(['standard', 'extra']).default(createGameBodyRulesetDefault),
   "guestDeckId": zod.number().optional()
 })
 
@@ -515,6 +519,7 @@ export const GetGameResponse = zod.object({
   "id": zod.number(),
   "status": zod.string(),
   "isPrivate": zod.boolean().optional(),
+  "ruleset": zod.enum(['local', 'standard', 'extra']).optional(),
   "hostId": zod.number(),
   "hostUsername": zod.string(),
   "hostDeckId": zod.number().nullish(),
@@ -551,6 +556,7 @@ export const JoinGameResponse = zod.object({
   "id": zod.number(),
   "status": zod.string(),
   "isPrivate": zod.boolean().optional(),
+  "ruleset": zod.enum(['local', 'standard', 'extra']).optional(),
   "hostId": zod.number(),
   "hostUsername": zod.string(),
   "hostDeckId": zod.number().nullish(),

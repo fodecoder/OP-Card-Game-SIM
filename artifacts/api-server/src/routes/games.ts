@@ -1,22 +1,13 @@
 import { Router, type IRouter } from "express";
-import { db, gamesTable, usersTable, decksTable, gameStatesTable, deckCardsTable, cardsTable } from "@workspace/db";
+import { db, gamesTable, usersTable, decksTable, gameStatesTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireAuth, type AuthRequest } from "../lib/auth";
-import { toGameEngineCard } from "../lib/cardMapper";
+import { validateStoredDeck } from "../lib/deckRules";
 import { CreateGameBody, JoinGameBody } from "@workspace/api-zod";
 import { initializeGame } from "@workspace/game-engine";
 import type { GameState } from "@workspace/game-engine";
 
 const router: IRouter = Router();
-
-async function loadDeckCards(deckId: number) {
-  const rows = await db
-    .select({ card: cardsTable })
-    .from(deckCardsTable)
-    .innerJoin(cardsTable, eq(deckCardsTable.cardId, cardsTable.id))
-    .where(eq(deckCardsTable.deckId, deckId));
-  return rows.map((r) => toGameEngineCard(r.card));
-}
 
 async function formatGame(game: typeof gamesTable.$inferSelect) {
   const [host] = await db.select().from(usersTable).where(eq(usersTable.id, game.hostId));
@@ -29,6 +20,7 @@ async function formatGame(game: typeof gamesTable.$inferSelect) {
     id: game.id,
     status: game.status,
     isPrivate: game.isPrivate,
+    ruleset: game.ruleset,
     hostId: game.hostId,
     hostUsername: host?.username ?? "Unknown",
     hostDeckId: game.hostDeckId ?? null,
@@ -61,7 +53,7 @@ router.post("/games", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const { deckId, isPrivate, isLocal, guestDeckId } = parsed.data;
+  const { deckId, isPrivate, isLocal, guestDeckId, ruleset = "standard" } = parsed.data;
 
   const [deck] = await db
     .select()
@@ -88,23 +80,29 @@ router.post("/games", requireAuth, async (req, res): Promise<void> => {
       return;
     }
 
-    const [hostCards, guestCards] = await Promise.all([
-      loadDeckCards(deckId),
-      loadDeckCards(guestDeckId),
+    const [hostResult, guestResult] = await Promise.all([
+      validateStoredDeck(deckId, "local"),
+      validateStoredDeck(guestDeckId, "local"),
     ]);
-
-    if (hostCards.length === 0) {
-      res.status(400).json({ error: "Your deck is empty. Add cards before playing." });
+    if (!hostResult.validation.valid) {
+      res.status(400).json({ error: hostResult.validation.errors.join(" ") });
       return;
     }
-    if (guestCards.length === 0) {
-      res.status(400).json({ error: "Opponent deck is empty. Add cards before playing." });
+    if (!guestResult.validation.valid) {
+      res.status(400).json({ error: guestResult.validation.errors.join(" ") });
       return;
     }
 
     let gameState: GameState;
     try {
-      gameState = initializeGame(userId, deckId, hostCards, userId, guestDeckId, guestCards);
+      gameState = initializeGame(
+        userId,
+        deckId,
+        hostResult.loaded.engineCards,
+        userId,
+        guestDeckId,
+        guestResult.loaded.engineCards,
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to initialize game";
       res.status(400).json({ error: msg });
@@ -119,6 +117,7 @@ router.post("/games", requireAuth, async (req, res): Promise<void> => {
         guestId: userId,
         guestDeckId,
         isPrivate: isPrivate ?? false,
+        ruleset: "local",
         status: "active",
         startedAt: new Date(),
       })
@@ -132,12 +131,19 @@ router.post("/games", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
+  const hostValidation = await validateStoredDeck(deckId, ruleset);
+  if (!hostValidation.validation.valid) {
+    res.status(400).json({ error: hostValidation.validation.errors.join(" ") });
+    return;
+  }
+
   const [game] = await db
     .insert(gamesTable)
     .values({
       hostId: userId,
       hostDeckId: deckId,
       isPrivate: isPrivate ?? false,
+      ruleset,
       status: "waiting",
     })
     .returning();
@@ -219,6 +225,15 @@ router.post("/games/:id/join", requireAuth, async (req, res): Promise<void> => {
 
   if (!deck) {
     res.status(400).json({ error: "Deck not found or does not belong to you" });
+    return;
+  }
+
+  const validation = await validateStoredDeck(
+    deckId,
+    game.ruleset === "extra" ? "extra" : "standard",
+  );
+  if (!validation.validation.valid) {
+    res.status(400).json({ error: validation.validation.errors.join(" ") });
     return;
   }
 

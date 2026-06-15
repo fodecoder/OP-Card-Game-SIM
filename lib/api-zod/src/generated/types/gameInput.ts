@@ -5,10 +5,12 @@
  * One Piece TCG Simulator API
  * OpenAPI spec version: 0.1.0
  */
+import type { GameInputRuleset } from './gameInputRuleset';
 
 export interface GameInput {
   deckId: number;
   isPrivate?: boolean;
   isLocal?: boolean;
+  ruleset?: GameInputRuleset;
   guestDeckId?: number;
 }

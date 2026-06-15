@@ -43,6 +43,7 @@ export default function LobbyScreen() {
   const [pendingGameId, setPendingGameId] = useState<number | null>(null);
   const [localHostDeckId, setLocalHostDeckId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [ruleset, setRuleset] = useState<"standard" | "extra">("standard");
 
   const openPicker = (mode: PickerMode, title: string, gameId?: number) => {
     setPickerMode(mode);
@@ -60,11 +61,12 @@ export default function LobbyScreen() {
         try {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           const newGame = await createGameMutation.mutateAsync({
-            data: { deckId, isPrivate: false },
+            data: { deckId, isPrivate: false, ruleset },
           });
           router.push(`/games/${newGame.id}`);
         } catch (e) {
-          console.error(e);
+          const msg = (e as { message?: string })?.message ?? "This deck is not legal for the selected ruleset.";
+          Alert.alert("Invalid deck", msg);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
           setBusy(false);
@@ -79,7 +81,8 @@ export default function LobbyScreen() {
           });
           router.push(`/games/${pendingGameId}`);
         } catch (e) {
-          console.error(e);
+          const msg = (e as { message?: string })?.message ?? "This deck cannot join this room.";
+          Alert.alert("Invalid deck", msg);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
           setBusy(false);
@@ -113,7 +116,7 @@ export default function LobbyScreen() {
         }
       }
     },
-    [pickerMode, pendingGameId, localHostDeckId, createGameMutation, joinGameMutation]
+    [pickerMode, pendingGameId, localHostDeckId, createGameMutation, joinGameMutation, ruleset]
   );
 
   const waitingGames = games?.filter((g) => g.status === "waiting") || [];
@@ -123,6 +126,26 @@ export default function LobbyScreen() {
     <View style={styles.header}>
       <Text style={[styles.title, { color: colors.foreground }]}>Game Lobby</Text>
       <View style={styles.headerBtns}>
+        <View style={[styles.rulesetSwitch, { borderColor: colors.border, backgroundColor: colors.card }]}>
+          {(["standard", "extra"] as const).map((value) => (
+            <TouchableOpacity
+              key={value}
+              style={[
+                styles.rulesetOption,
+                value === ruleset && { backgroundColor: colors.primary },
+              ]}
+              onPress={() => setRuleset(value)}
+            >
+              <Text style={{
+                color: value === ruleset ? colors.primaryForeground : colors.mutedForeground,
+                fontSize: 11,
+                fontWeight: "bold",
+              }}>
+                {value.toUpperCase()}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
         <TouchableOpacity
           style={[styles.localBtn, { backgroundColor: colors.secondary, borderColor: colors.border }]}
           onPress={() => {
@@ -318,6 +341,14 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 28, fontWeight: "bold" },
   headerBtns: { flexDirection: "row", gap: 8 },
+  rulesetSwitch: {
+    flexDirection: "row",
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 2,
+    alignItems: "center",
+  },
+  rulesetOption: { paddingHorizontal: 7, paddingVertical: 7, borderRadius: 6 },
   localBtn: {
     flexDirection: "row",
     alignItems: "center",

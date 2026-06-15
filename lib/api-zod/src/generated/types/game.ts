@@ -5,11 +5,13 @@
  * One Piece TCG Simulator API
  * OpenAPI spec version: 0.1.0
  */
+import type { GameRuleset } from './gameRuleset';
 
 export interface Game {
   id: number;
   status: string;
   isPrivate?: boolean;
+  ruleset?: GameRuleset;
   hostId: number;
   hostUsername: string;
   /** @nullable */
