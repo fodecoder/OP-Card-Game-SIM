@@ -10,7 +10,7 @@ import { useState, useCallback, useMemo } from "react";
 import { useColors } from "@/hooks/useColors";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  useListCards,
+  listCards,
   useAddCardToDeck,
   useGetDeck,
   useUpdateDeck,
@@ -18,7 +18,9 @@ import {
   useRemoveFromCollection,
   useGetCollection,
   getGetDeckQueryKey,
+  type Card,
 } from "@workspace/api-client-react";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { CardItem } from "@/components/CardItem";
 import { SkeletonLoader } from "@/components/SkeletonLoader";
 import { Feather } from "@expo/vector-icons";
@@ -26,6 +28,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 
 const COLORS = ["Red", "Green", "Blue", "Purple", "Black", "Yellow"];
+const PAGE_SIZE = 30;
 
 export default function CardsScreen() {
   const colors = useColors();
@@ -44,12 +47,30 @@ export default function CardsScreen() {
   const [addingCardId, setAddingCardId] = useState<number | null>(null);
   const [removingCardId, setRemovingCardId] = useState<number | null>(null);
 
-  const { data, isLoading } = useListCards({
-    search: debouncedSearch || undefined,
-    color: selectedColor,
-    type: isLeaderPicker ? "Leader" : undefined,
-    limit: 50,
+  const cardsQuery = useInfiniteQuery({
+    queryKey: ["cards", "infinite", debouncedSearch, selectedColor, isLeaderPicker],
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) =>
+      listCards({
+        search: debouncedSearch || undefined,
+        color: selectedColor,
+        type: isLeaderPicker ? "Leader" : undefined,
+        page: pageParam,
+        limit: PAGE_SIZE,
+      }),
+    getNextPageParam: (lastPage) => {
+      const loaded = lastPage.page * lastPage.limit;
+      return loaded < lastPage.total ? lastPage.page + 1 : undefined;
+    },
   });
+
+  const cards = useMemo(() => {
+    const uniqueCards = new Map<number, Card>();
+    cardsQuery.data?.pages.forEach((page) => {
+      page.cards.forEach((card) => uniqueCards.set(card.id, card));
+    });
+    return Array.from(uniqueCards.values());
+  }, [cardsQuery.data]);
 
   const { data: deck, refetch: refetchDeck } = useGetDeck(deckId ?? 0, {
     query: {
@@ -275,7 +296,7 @@ export default function CardsScreen() {
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       {renderHeader()}
 
-      {isLoading ? (
+      {cardsQuery.isLoading ? (
         <View style={styles.loadingGrid}>
           {Array(6).fill(0).map((_, i) => (
             <View key={i} style={styles.loadingCard}>
@@ -285,11 +306,21 @@ export default function CardsScreen() {
         </View>
       ) : (
         <FlatList
-          data={data?.cards || []}
+          data={cards}
           keyExtractor={(item) => item.id.toString()}
           numColumns={3}
           contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 100 }]}
           columnWrapperStyle={styles.columnWrapper}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={7}
+          removeClippedSubviews
+          onEndReachedThreshold={0.45}
+          onEndReached={() => {
+            if (cardsQuery.hasNextPage && !cardsQuery.isFetchingNextPage) {
+              cardsQuery.fetchNextPage();
+            }
+          }}
           renderItem={({ item }) => {
             const deckQty = deckCardMap.get(item.id) ?? 0;
             const collQty = collectionMap.get(item.id) ?? 0;
@@ -361,6 +392,22 @@ export default function CardsScreen() {
               </Text>
             </View>
           }
+          ListFooterComponent={
+            cardsQuery.isFetchingNextPage ? (
+              <View style={styles.loadingMore}>
+                <View style={styles.loadingMoreCards}>
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <View key={index} style={styles.loadingCard}>
+                      <SkeletonLoader height={180} />
+                    </View>
+                  ))}
+                </View>
+                <Text style={[styles.loadingMoreText, { color: colors.mutedForeground }]}>
+                  Loading more cards...
+                </Text>
+              </View>
+            ) : null
+          }
         />
       )}
     </View>
@@ -401,6 +448,9 @@ const styles = StyleSheet.create({
   filterText: { fontSize: 14, fontWeight: "500" },
   loadingGrid: { flexDirection: "row", flexWrap: "wrap", padding: 16, gap: 12 },
   loadingCard: { width: "31%" },
+  loadingMore: { paddingTop: 8, paddingBottom: 20, gap: 10 },
+  loadingMoreCards: { flexDirection: "row", justifyContent: "space-between" },
+  loadingMoreText: { fontSize: 12, textAlign: "center" },
   listContent: { padding: 16, gap: 16 },
   columnWrapper: { justifyContent: "space-between" },
   cardWrapper: { width: "31%", position: "relative" },

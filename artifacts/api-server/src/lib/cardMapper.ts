@@ -1,5 +1,6 @@
 import type { Card } from "@workspace/db";
 import type { DBCard } from "@workspace/game-engine";
+import { proxyCardImageUrl } from "./cardImage";
 
 const VALID_CARD_TYPES = new Set<DBCard["cardType"]>([
   "leader",
@@ -35,7 +36,7 @@ export function toGameEngineCard(card: Card): DBCard {
     effectText: card.effectText,
     triggerEffect: card.triggerEffect,
     keywords: card.keywords ?? [],
-    imageUrl: card.imageUrl,
+    imageUrl: proxyCardImageUrl(card.imageUrl),
     restriction: card.restriction,
   };
 }

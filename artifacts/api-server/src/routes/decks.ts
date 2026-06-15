@@ -9,6 +9,7 @@ import {
   AddCardToDeckBody,
 } from "@workspace/api-zod";
 import { validateStoredDeck } from "../lib/deckRules";
+import { proxyCardImageUrl } from "../lib/cardImage";
 
 const router: IRouter = Router();
 
@@ -33,10 +34,11 @@ router.get("/decks", requireAuth, async (req, res): Promise<void> => {
           .where(eq(cardsTable.id, deck.leaderId));
         if (leader) {
           leaderName = leader.name;
-          leaderImageUrl = leader.imageUrl ?? null;
+          leaderImageUrl = proxyCardImageUrl(leader.imageUrl);
           leaderColor = leader.color;
         }
       }
+      const { validation } = await validateStoredDeck(deck.id, "extra");
 
       return {
         id: deck.id,
@@ -47,6 +49,7 @@ router.get("/decks", requireAuth, async (req, res): Promise<void> => {
         leaderColor,
         cardCount: deck.cardCount,
         isValid: deck.isValid,
+        validationErrors: validation.errors,
         description: deck.description ?? null,
         createdAt: deck.createdAt.toISOString(),
         updatedAt: deck.updatedAt.toISOString(),
@@ -85,6 +88,10 @@ router.post("/decks", requireAuth, async (req, res): Promise<void> => {
     leaderColor: null,
     cardCount: deck.cardCount,
     isValid: deck.isValid,
+    validationErrors: [
+      "The deck must have exactly one Leader card.",
+      "The main deck must contain exactly 50 cards (currently 0).",
+    ],
     description: deck.description ?? null,
     createdAt: deck.createdAt.toISOString(),
     updatedAt: deck.updatedAt.toISOString(),
@@ -121,10 +128,11 @@ router.post("/decks/starters", requireAuth, async (req, res): Promise<void> => {
         name: existingDeck.name,
         leaderId: existingDeck.leaderId ?? null,
         leaderName: leader.name,
-        leaderImageUrl: leader.imageUrl ?? null,
+        leaderImageUrl: proxyCardImageUrl(leader.imageUrl),
         leaderColor: leader.color,
         cardCount: existingDeck.cardCount,
         isValid: existingDeck.isValid,
+        validationErrors: (await validateStoredDeck(existingDeck.id, "extra")).validation.errors,
         description: existingDeck.description ?? null,
         createdAt: existingDeck.createdAt.toISOString(),
         updatedAt: existingDeck.updatedAt.toISOString(),
@@ -141,7 +149,7 @@ router.post("/decks/starters", requireAuth, async (req, res): Promise<void> => {
     const sameColorCards = await db
       .select()
       .from(cardsTable)
-      .where(eq(cardsTable.cardType, "Character"));
+      .where(eq(cardsTable.cardType, "character"));
 
     const filtered = sameColorCards.filter((c) => {
       const cardColors = (c.color ?? "").split("/").map((x: string) => x.trim());
@@ -177,10 +185,11 @@ router.post("/decks/starters", requireAuth, async (req, res): Promise<void> => {
       name: newDeck.name,
       leaderId: newDeck.leaderId ?? null,
       leaderName: leader.name,
-      leaderImageUrl: leader.imageUrl ?? null,
+      leaderImageUrl: proxyCardImageUrl(leader.imageUrl),
       leaderColor: leader.color,
       cardCount: totalCards,
       isValid,
+      validationErrors: isValid ? [] : ["The starter deck could not be filled to 50 legal cards."],
       description: null,
       createdAt: newDeck.createdAt.toISOString(),
       updatedAt: newDeck.updatedAt.toISOString(),
@@ -215,7 +224,7 @@ router.get("/decks/:id", requireAuth, async (req, res): Promise<void> => {
     .from(deckCardsTable)
     .where(eq(deckCardsTable.deckId, id));
 
-  const cardsWithDetails = await Promise.all(
+  const cardsWithDetails = (await Promise.all(
     deckCards.map(async (dc) => {
       const [card] = await db
         .select()
@@ -227,6 +236,8 @@ router.get("/decks/:id", requireAuth, async (req, res): Promise<void> => {
         card: card ? formatCard(card) : null,
       };
     })
+  )).sort((a, b) =>
+    (a.card?.cardNumber ?? "").localeCompare(b.card?.cardNumber ?? "", undefined, { numeric: true }),
   );
 
   let leaderName: string | null = null;
@@ -240,10 +251,11 @@ router.get("/decks/:id", requireAuth, async (req, res): Promise<void> => {
       .where(eq(cardsTable.id, deck.leaderId));
     if (leader) {
       leaderName = leader.name;
-      leaderImageUrl = leader.imageUrl ?? null;
+      leaderImageUrl = proxyCardImageUrl(leader.imageUrl);
       leaderColor = leader.color;
     }
   }
+  const { validation } = await validateStoredDeck(id, "extra");
 
   res.json({
     id: deck.id,
@@ -254,6 +266,7 @@ router.get("/decks/:id", requireAuth, async (req, res): Promise<void> => {
     leaderColor,
     cardCount: deck.cardCount,
     isValid: deck.isValid,
+    validationErrors: validation.errors,
     description: deck.description ?? null,
     createdAt: deck.createdAt.toISOString(),
     updatedAt: deck.updatedAt.toISOString(),
@@ -305,6 +318,13 @@ router.patch("/decks/:id", requireAuth, async (req, res): Promise<void> => {
     })
     .where(eq(decksTable.id, id))
     .returning();
+  const { validation } = await validateStoredDeck(id, "extra");
+  if (updated.isValid !== validation.valid) {
+    await db
+      .update(decksTable)
+      .set({ isValid: validation.valid })
+      .where(eq(decksTable.id, id));
+  }
 
   res.json({
     id: updated.id,
@@ -314,7 +334,8 @@ router.patch("/decks/:id", requireAuth, async (req, res): Promise<void> => {
     leaderImageUrl: null,
     leaderColor: null,
     cardCount: updated.cardCount,
-    isValid: updated.isValid,
+    isValid: validation.valid,
+    validationErrors: validation.errors,
     description: updated.description ?? null,
     createdAt: updated.createdAt.toISOString(),
     updatedAt: updated.updatedAt.toISOString(),
@@ -380,8 +401,8 @@ router.post("/decks/:id/cards", requireAuth, async (req, res): Promise<void> => 
     if (deck.leaderId) {
       const [leader] = await db.select().from(cardsTable).where(eq(cardsTable.id, deck.leaderId));
       if (leader) {
-        const leaderColors = leader.color.split("/").map((c) => c.trim());
-        const cardColors = card.color.split("/").map((c) => c.trim());
+        const leaderColors = leader.color.split("/").map((c) => c.trim().toLowerCase());
+        const cardColors = card.color.split("/").map((c) => c.trim().toLowerCase());
         const colorMatch = cardColors.some((cc) => leaderColors.includes(cc));
         if (!colorMatch) {
           res.status(400).json({
@@ -427,7 +448,7 @@ router.post("/decks/:id/cards", requireAuth, async (req, res): Promise<void> => 
     .set({ cardCount: totalCards, isValid })
     .where(eq(decksTable.id, deckId));
 
-  const cardsWithDetails = await Promise.all(
+  const cardsWithDetails = (await Promise.all(
     allDeckCards.map(async (dc) => {
       const [card] = await db
         .select()
@@ -439,6 +460,8 @@ router.post("/decks/:id/cards", requireAuth, async (req, res): Promise<void> => 
         card: card ? formatCard(card) : null,
       };
     })
+  )).sort((a, b) =>
+    (a.card?.cardNumber ?? "").localeCompare(b.card?.cardNumber ?? "", undefined, { numeric: true }),
   );
 
   const [updatedDeck] = await db.select().from(decksTable).where(eq(decksTable.id, deckId));
@@ -452,6 +475,7 @@ router.post("/decks/:id/cards", requireAuth, async (req, res): Promise<void> => 
     leaderColor: null,
     cardCount: updatedDeck.cardCount,
     isValid: updatedDeck.isValid,
+    validationErrors: validation.errors,
     description: updatedDeck.description ?? null,
     createdAt: updatedDeck.createdAt.toISOString(),
     updatedAt: updatedDeck.updatedAt.toISOString(),
@@ -494,7 +518,7 @@ router.delete("/decks/:id/cards/:cardId", requireAuth, async (req, res): Promise
     .set({ cardCount: totalCards, isValid })
     .where(eq(decksTable.id, deckId));
 
-  const cardsWithDetails = await Promise.all(
+  const cardsWithDetails = (await Promise.all(
     allDeckCards.map(async (dc) => {
       const [card] = await db
         .select()
@@ -506,6 +530,8 @@ router.delete("/decks/:id/cards/:cardId", requireAuth, async (req, res): Promise
         card: card ? formatCard(card) : null,
       };
     })
+  )).sort((a, b) =>
+    (a.card?.cardNumber ?? "").localeCompare(b.card?.cardNumber ?? "", undefined, { numeric: true }),
   );
 
   const [updatedDeck] = await db.select().from(decksTable).where(eq(decksTable.id, deckId));
@@ -519,6 +545,7 @@ router.delete("/decks/:id/cards/:cardId", requireAuth, async (req, res): Promise
     leaderColor: null,
     cardCount: updatedDeck.cardCount,
     isValid: updatedDeck.isValid,
+    validationErrors: validation.errors,
     description: updatedDeck.description ?? null,
     createdAt: updatedDeck.createdAt.toISOString(),
     updatedAt: updatedDeck.updatedAt.toISOString(),

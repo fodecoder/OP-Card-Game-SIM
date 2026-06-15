@@ -52,11 +52,28 @@ function addLog(state: GameState, ...messages: string[]): GameState {
 
 function hasKeyword(card: CardInstance, keyword: string): boolean {
   const expected = keyword.trim().toLowerCase();
-  return card.keywords.some((value) => value.trim().toLowerCase() === expected);
+  return (
+    card.keywords.some((value) => value.trim().toLowerCase() === expected) ||
+    card.effectText?.toLowerCase().includes(`[${expected}]`) === true
+  );
 }
 
 function effectivePower(card: CardInstance): number {
   return (card.power ?? 0) + card.attachedDon * 1000;
+}
+
+type EffectTrigger = "On Play" | "Activate: Main" | "When Attacking";
+
+function effectTextForTrigger(text: string | null, trigger: EffectTrigger): string | null {
+  if (!text) return null;
+  const marker = `[${trigger}]`;
+  const start = text.toLowerCase().indexOf(marker.toLowerCase());
+  if (start < 0) return null;
+  const afterMarker = start + marker.length;
+  const nextTrigger = /\[(?:On Play|Activate: Main|When Attacking|On K\.O\.|On Block|End of Your Turn|Opponent's Turn|Your Turn|Trigger|Counter|Main)\]/gi;
+  nextTrigger.lastIndex = afterMarker;
+  const next = nextTrigger.exec(text);
+  return text.slice(afterMarker, next?.index ?? text.length).trim();
 }
 
 function parseOrderedEffects(text: string | null): EffectOperation[] {
@@ -66,6 +83,8 @@ function parseOrderedEffects(text: string | null): EffectOperation[] {
   const matches: Array<{ index: number; operation: EffectOperation }> = [];
   const drawPattern = /\bdraw\s+(\d+|one)\s+cards?\b/gi;
   const trashPattern = /\b(?:trash|discard)\s+(\d+|one)\s+cards?\s+from\s+your\s+hand\b/gi;
+  const lifeToHandPattern = /\badd\s+(\d+|one)\s+cards?\s+from\s+(?:the\s+)?(?:top|bottom|top or bottom)\s+of\s+your\s+life\s+cards?\s+to\s+your\s+hand\b/gi;
+  const trashLifePattern = /\btrash\s+(?:up to\s+)?(\d+|one)\s+(?:of\s+your\s+)?(?:opponent's\s+)?life\s+cards?\b/gi;
 
   for (const match of body.matchAll(drawPattern)) {
     matches.push({
@@ -84,6 +103,30 @@ function parseOrderedEffects(text: string | null): EffectOperation[] {
         count: match[1].toLowerCase() === "one" ? 1 : Number(match[1]),
       },
     });
+  }
+  for (const match of body.matchAll(lifeToHandPattern)) {
+    matches.push({
+      index: match.index ?? 0,
+      operation: {
+        type: "life_to_hand",
+        count: match[1].toLowerCase() === "one" ? 1 : Number(match[1]),
+      },
+    });
+  }
+  for (const match of body.matchAll(trashLifePattern)) {
+    matches.push({
+      index: match.index ?? 0,
+      operation: {
+        type: "trash_life",
+        count: match[1].toLowerCase() === "one" ? 1 : Number(match[1]),
+      },
+    });
+  }
+  if (/\b(?:rest this character|rest this leader)\b/i.test(body)) {
+    matches.push({ index: body.search(/\brest this (?:character|leader)\b/i), operation: { type: "rest_source" } });
+  }
+  if (/\bset this (?:character|leader) as active\b/i.test(body)) {
+    matches.push({ index: body.search(/\bset this (?:character|leader) as active\b/i), operation: { type: "set_source_active" } });
   }
 
   return matches.sort((a, b) => a.index - b.index).map(({ operation }) => operation);
@@ -109,6 +152,7 @@ function createPlayerState(userId: number, deckId: number, cards: DBCard[]): Pla
     donRested: 0,
     mulliganUsed: false,
     setupComplete: false,
+    abilitiesUsed: [],
   };
 }
 
@@ -177,6 +221,7 @@ function continuePendingEffect(state: GameState): GameState {
   let current = state;
   let pending = current.pendingEffect;
   if (!pending) return current;
+  const sourceName = pending.sourceName;
 
   while (pending.operations.length > 0) {
     const [operation, ...remaining] = pending.operations;
@@ -184,31 +229,74 @@ function continuePendingEffect(state: GameState): GameState {
       return { ...current, pendingEffect: { ...pending, operations: [operation, ...remaining] } };
     }
 
-    for (let i = 0; i < operation.count; i++) {
-      current = drawOne(current, pending.side);
-      if (current.winner) return current;
+    if (operation.type === "draw") {
+      for (let i = 0; i < operation.count; i++) {
+        current = drawOne(current, pending.side);
+        if (current.winner) return current;
+      }
+      current = addLog(current, `${pending.sourceName}: drew ${operation.count} card(s).`);
+    } else {
+      const player = getPlayer(current, pending.side);
+      if (operation.type === "rest_source" || operation.type === "set_source_active") {
+        const rested = operation.type === "rest_source";
+        const sourceInstanceId = pending.sourceInstanceId;
+        const leader = sourceInstanceId === "leader"
+          ? { ...player.leader, rested }
+          : player.leader;
+        const field = player.field.map((card) =>
+          card.instanceId === sourceInstanceId ? { ...card, rested } : card,
+        );
+        current = updatePlayer(current, pending.side, { ...player, leader, field });
+        current = addLog(current, `${pending.sourceName} was set ${rested ? "rested" : "active"}.`);
+      } else if (operation.type === "life_to_hand") {
+        const life = [...player.life];
+        const moved = life.splice(Math.max(0, life.length - operation.count), operation.count);
+        current = updatePlayer(current, pending.side, {
+          ...player,
+          life,
+          hand: [...player.hand, ...moved],
+        });
+        current = addLog(current, `${pending.sourceName}: moved ${moved.length} Life card(s) to hand.`);
+      } else if (operation.type === "trash_life") {
+        const targetSide = opponentSide(pending.side);
+        const target = getPlayer(current, targetSide);
+        const life = [...target.life];
+        const moved = life.splice(Math.max(0, life.length - operation.count), operation.count);
+        current = updatePlayer(current, targetSide, {
+          ...target,
+          life,
+          trash: [...target.trash, ...moved],
+        });
+        current = addLog(current, `${pending.sourceName}: trashed ${moved.length} Life card(s).`);
+      }
     }
-    current = addLog(current, `${pending.sourceName}: drew ${operation.count} card(s).`);
     pending = { ...pending, operations: remaining };
     current = { ...current, pendingEffect: pending };
   }
 
-  return addLog({ ...current, pendingEffect: null }, `${pending.sourceName}'s effect resolved.`);
+  return addLog({ ...current, pendingEffect: null }, `${sourceName}'s effect resolved.`);
 }
 
-function queueEffect(state: GameState, side: PlayerSide, card: CardInstance): GameState {
-  const operations = parseOrderedEffects(card.effectText);
+function queueEffect(
+  state: GameState,
+  side: PlayerSide,
+  card: CardInstance,
+  trigger: EffectTrigger,
+): GameState {
+  const triggeredText = effectTextForTrigger(card.effectText, trigger);
+  const operations = parseOrderedEffects(triggeredText);
   if (operations.length === 0) {
-    return card.effectText
-      ? addLog(state, `${card.name}: card-specific effect is not automated yet.`)
+    return triggeredText
+      ? addLog(state, `${card.name} ${trigger}: effect requires target selection or a card-specific handler.`)
       : state;
   }
 
   const pendingEffect: PendingEffect = {
-    sourceInstanceId: card.instanceId,
+    sourceInstanceId: card.cardType === "leader" ? "leader" : card.instanceId,
     sourceName: card.name,
     side,
     operations,
+    unresolvedText: triggeredText ?? undefined,
   };
   return continuePendingEffect({ ...state, pendingEffect });
 }
@@ -229,6 +317,7 @@ function refreshPlayer(state: GameState, side: PlayerSide): GameState {
     })),
     donActive: player.donActive + player.donRested + attached,
     donRested: 0,
+    abilitiesUsed: [],
   });
 }
 
@@ -426,8 +515,8 @@ export function processAction(
         donRested: player.donRested + cost,
       });
       next = addLog(next, `${card.name} was played for ${cost} DON!!.`);
-      if (hasKeyword(card, "On Play") || card.cardType === "event") {
-        next = queueEffect(next, side, played);
+      if (effectTextForTrigger(card.effectText, "On Play") || hasKeyword(card, "On Play")) {
+        next = queueEffect(next, side, played, "On Play");
       }
       return { state: next };
     }
@@ -504,10 +593,14 @@ export function processAction(
         damage: hasKeyword(attacker, "Double Attack") ? 2 : 1,
         banish: hasKeyword(attacker, "Banish"),
       };
+      let next = updatePlayer(state, side, { ...player, leader, field });
+      if (effectTextForTrigger(attacker.effectText, "When Attacking") || hasKeyword(attacker, "When Attacking")) {
+        next = queueEffect(next, side, attacker, "When Attacking");
+      }
       return {
         state: addLog(
           {
-            ...updatePlayer(state, side, { ...player, leader, field }),
+            ...next,
             pendingAttack,
           },
           `${attacker.name} attacks.`,
@@ -568,10 +661,28 @@ export function processAction(
           ? player.leader
           : player.field.find((value) => value.instanceId === action.instanceId);
       if (!card) return { state, error: "Ability source not found" };
-      if (!card.keywords.some((keyword) => keyword.toLowerCase().startsWith("activate: main"))) {
+      if (!effectTextForTrigger(card.effectText, "Activate: Main") && !hasKeyword(card, "Activate: Main")) {
         return { state, error: "This card has no Activate: Main ability" };
       }
-      return { state: queueEffect(state, side, card) };
+      const abilityKey = `${card.instanceId}:activate-main`;
+      const abilitiesUsed = player.abilitiesUsed ?? [];
+      if (hasKeyword(card, "Once Per Turn") && abilitiesUsed.includes(abilityKey)) {
+        return { state, error: "This ability has already been used this turn" };
+      }
+      const updatedPlayer = {
+        ...player,
+        abilitiesUsed: hasKeyword(card, "Once Per Turn")
+          ? [...abilitiesUsed, abilityKey]
+          : abilitiesUsed,
+      };
+      return {
+        state: queueEffect(
+          addLog(updatePlayer(state, side, updatedPlayer), `${card.name}: Activate Main.`),
+          side,
+          card,
+          "Activate: Main",
+        ),
+      };
     }
 
     case "concede":

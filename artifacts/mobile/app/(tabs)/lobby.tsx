@@ -312,6 +312,14 @@ function DeckPickerModal({
                       {item.leaderName ?? "No Leader"} · {item.cardCount} cards
                       {item.isValid ? "" : " · Incomplete"}
                     </Text>
+                    {!item.isValid && item.validationErrors?.[0] && (
+                      <Text
+                        style={[styles.deckError, { color: colors.destructive }]}
+                        numberOfLines={2}
+                      >
+                        {item.validationErrors[0]}
+                      </Text>
+                    )}
                   </View>
                   <Feather name="chevron-right" size={20} color={colors.mutedForeground} />
                 </TouchableOpacity>
@@ -407,6 +415,7 @@ const styles = StyleSheet.create({
   deckOptionInfo: { flex: 1 },
   deckOptionName: { fontSize: 16, fontWeight: "bold", marginBottom: 2 },
   deckOptionMeta: { fontSize: 13 },
+  deckError: { fontSize: 11, lineHeight: 15, marginTop: 3 },
   cancelBtn: {
     marginTop: 8,
     paddingVertical: 14,

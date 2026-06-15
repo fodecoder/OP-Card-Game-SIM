@@ -130,6 +130,7 @@ export interface Deck {
   leaderColor?: string | null;
   cardCount: number;
   isValid?: boolean;
+  validationErrors?: string[];
   /** @nullable */
   description?: string | null;
   createdAt: string;
@@ -155,6 +156,7 @@ export interface DeckWithCards {
   leaderColor?: string | null;
   cardCount: number;
   isValid?: boolean;
+  validationErrors?: string[];
   /** @nullable */
   description?: string | null;
   createdAt: string;

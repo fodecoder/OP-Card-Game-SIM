@@ -153,6 +153,18 @@ export default function DeckBuilderScreen() {
               {deck.cardCount} / 50
             </Text>
           </View>
+          {!deck.isValid && (deck.validationErrors?.length ?? 0) > 0 && (
+            <View style={[styles.validationList, { borderTopColor: colors.border }]}>
+              {deck.validationErrors?.map((error) => (
+                <View key={error} style={styles.validationRow}>
+                  <Feather name="alert-circle" size={14} color={colors.destructive} />
+                  <Text style={[styles.validationText, { color: colors.destructive }]}>
+                    {error}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -370,6 +382,9 @@ const styles = StyleSheet.create({
   },
   statLabel: { fontSize: 16 },
   statValue: { fontSize: 16, fontWeight: "bold" },
+  validationList: { marginTop: 14, paddingTop: 12, borderTopWidth: 1, gap: 7 },
+  validationRow: { flexDirection: "row", alignItems: "flex-start", gap: 7 },
+  validationText: { flex: 1, fontSize: 12, lineHeight: 17 },
   section: { gap: 12 },
   sectionHeader: {
     flexDirection: "row",

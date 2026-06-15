@@ -44,6 +44,7 @@ export interface PlayerState {
   donRested: number;
   mulliganUsed: boolean;
   setupComplete: boolean;
+  abilitiesUsed: string[];
 }
 
 export interface PendingAttack {
@@ -62,6 +63,10 @@ export type GameFormat = "local" | "standard" | "extra";
 
 export type EffectOperation =
   | { type: "draw"; count: number }
+  | { type: "rest_source" }
+  | { type: "set_source_active" }
+  | { type: "life_to_hand"; count: number }
+  | { type: "trash_life"; count: number }
   | {
       type: "trash_from_hand";
       count: number;
@@ -73,6 +78,7 @@ export interface PendingEffect {
   sourceName: string;
   side: PlayerSide;
   operations: EffectOperation[];
+  unresolvedText?: string;
 }
 
 export interface GameState {

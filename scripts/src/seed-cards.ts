@@ -35,7 +35,7 @@ async function seed() {
         cardTypes: card.cardTypes ?? null,
         subtypes: subtypes,
         imageUrl: card.imageUrl ?? null,
-        keywords: card.keywords ?? [],
+        keywords: [...(card.keywords ?? [])],
       })
       .onConflictDoUpdate({
         target: cardsTable.cardNumber,

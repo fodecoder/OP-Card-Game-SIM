@@ -35,13 +35,17 @@ router.get("/collection", requireAuth, async (req, res): Promise<void> => {
     })
   );
 
-  const filtered = cardsWithDetails.filter((c): c is NonNullable<typeof c> => {
-    if (!c) return false;
-    if (search) {
-      return c.card.name.toLowerCase().includes(search.toLowerCase());
-    }
-    return true;
-  });
+  const filtered = cardsWithDetails
+    .filter((c): c is NonNullable<typeof c> => {
+      if (!c) return false;
+      if (search) {
+        return c.card.name.toLowerCase().includes(search.toLowerCase());
+      }
+      return true;
+    })
+    .sort((a, b) =>
+      a.card.cardNumber.localeCompare(b.card.cardNumber, undefined, { numeric: true }),
+    );
 
   const total = filtered.length;
   const paged = filtered.slice(offset, offset + limitNum);

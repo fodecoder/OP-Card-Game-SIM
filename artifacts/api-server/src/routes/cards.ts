@@ -1,9 +1,47 @@
 import { Router, type IRouter } from "express";
 import { db, cardsTable } from "@workspace/db";
-import { eq, ilike, and, SQL } from "drizzle-orm";
+import { eq, ilike, and, asc, SQL } from "drizzle-orm";
 import type { Request } from "express";
+import { OFFICIAL_CARD_HOST, proxyCardImageUrl } from "../lib/cardImage";
 
 const router: IRouter = Router();
+
+router.get("/card-images", async (req, res): Promise<void> => {
+  const src = typeof req.query.src === "string" ? req.query.src : "";
+
+  try {
+    const url = new URL(src);
+    if (
+      url.protocol !== "https:" ||
+      url.hostname !== OFFICIAL_CARD_HOST ||
+      !url.pathname.startsWith("/images/cardlist/card/")
+    ) {
+      res.status(400).json({ error: "Unsupported card image URL" });
+      return;
+    }
+
+    const response = await fetch(url, {
+      headers: { "User-Agent": "OP-Card-Game-SIM/1.0" },
+      redirect: "error",
+    });
+    if (!response.ok) {
+      res.status(response.status).end();
+      return;
+    }
+
+    const contentType = response.headers.get("content-type");
+    if (!contentType?.startsWith("image/")) {
+      res.status(502).json({ error: "Upstream response is not an image" });
+      return;
+    }
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.send(Buffer.from(await response.arrayBuffer()));
+  } catch {
+    res.status(400).json({ error: "Invalid card image URL" });
+  }
+});
 
 router.get("/cards", async (req, res): Promise<void> => {
   const { search, color, type, rarity, set, cost, page = "1", limit = "20" } = req.query as Record<string, string | undefined>;
@@ -36,7 +74,13 @@ router.get("/cards", async (req, res): Promise<void> => {
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
   const [allCards, countResult] = await Promise.all([
-    db.select().from(cardsTable).where(whereClause).limit(limitNum).offset(offset),
+    db
+      .select()
+      .from(cardsTable)
+      .where(whereClause)
+      .orderBy(asc(cardsTable.cardNumber), asc(cardsTable.id))
+      .limit(limitNum)
+      .offset(offset),
     db.$count(cardsTable, whereClause),
   ]);
 
@@ -83,7 +127,7 @@ function formatCard(card: typeof cardsTable.$inferSelect) {
     triggerEffect: card.triggerEffect ?? null,
     life: card.life ?? null,
     cardTypes: card.cardTypes ?? null,
-    imageUrl: card.imageUrl ?? null,
+    imageUrl: proxyCardImageUrl(card.imageUrl),
     keywords: card.keywords ?? [],
     restriction: card.restriction ?? null,
   };

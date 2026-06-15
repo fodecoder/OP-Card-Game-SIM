@@ -886,6 +886,10 @@ components:
           type: integer
         isValid:
           type: boolean
+        validationErrors:
+          type: array
+          items:
+            type: string
         description:
           type: ["string", "null"]
         createdAt:
@@ -926,6 +930,10 @@ components:
           type: integer
         isValid:
           type: boolean
+        validationErrors:
+          type: array
+          items:
+            type: string
         description:
           type: ["string", "null"]
         createdAt:

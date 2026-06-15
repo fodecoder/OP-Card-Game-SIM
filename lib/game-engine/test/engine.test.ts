@@ -138,3 +138,69 @@ describe("ordered effects", () => {
     expect(state.host.trash.some((value) => value.instanceId === selected)).toBe(true);
   });
 });
+
+describe("card abilities", () => {
+  it("activates a Main ability from effect text and enforces Once Per Turn", () => {
+    let state = completeSetup(initializeGame(1, 1, deck("H"), 2, 2, deck("G")));
+    const abilityCard = card({
+      id: 100,
+      cardNumber: "TEST-002",
+      name: "Main Ability",
+      cardType: "character",
+      effectText: "[Activate: Main] [Once Per Turn] Draw 1 card.",
+      keywords: [],
+    });
+    const instance = {
+      ...abilityCard,
+      instanceId: "main-ability",
+      rested: false,
+      attachedDon: 0,
+      summonedThisTurn: false,
+    };
+    state = {
+      ...state,
+      host: { ...state.host, field: [instance] },
+    };
+
+    const handBefore = state.host.hand.length;
+    const first = processAction(state, "host", {
+      type: "activate_ability",
+      instanceId: instance.instanceId,
+    });
+    expect(first.error).toBeUndefined();
+    expect(first.state.host.hand).toHaveLength(handBefore + 1);
+
+    const second = processAction(first.state, "host", {
+      type: "activate_ability",
+      instanceId: instance.instanceId,
+    });
+    expect(second.error).toBe("This ability has already been used this turn");
+  });
+
+  it("resolves When Attacking abilities before combat resolution", () => {
+    let state = completeSetup(initializeGame(1, 1, deck("H"), 2, 2, deck("G")));
+    state = {
+      ...state,
+      turn: 2,
+      host: {
+        ...state.host,
+        leader: {
+          ...state.host.leader,
+          effectText: "[When Attacking] Draw 1 card.",
+          keywords: [],
+        },
+      },
+    };
+
+    const handBefore = state.host.hand.length;
+    const result = processAction(state, "host", {
+      type: "declare_attack",
+      attackerInstanceId: "leader",
+      targetSide: "guest",
+      targetInstanceId: "leader",
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.state.host.hand).toHaveLength(handBefore + 1);
+    expect(result.state.pendingAttack).not.toBeNull();
+  });
+});

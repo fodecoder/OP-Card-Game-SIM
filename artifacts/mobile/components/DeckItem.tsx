@@ -2,7 +2,7 @@ import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { Deck } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
-import { Image } from "expo-image";
+import { CardImage, getCardColors } from "./CardImage";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 
@@ -15,26 +15,17 @@ interface DeckItemProps {
 export function DeckItem({ deck, onPress, style }: DeckItemProps) {
   const colors = useColors();
 
-  const getFallbackColor = () => {
-    if (!deck.leaderColor) return colors.muted;
-    const colorMap: Record<string, string> = {
-      Red: colors.cardGlow.red,
-      Green: colors.cardGlow.green,
-      Blue: colors.cardGlow.blue,
-      Purple: colors.cardGlow.purple,
-      Black: colors.cardGlow.black,
-      Yellow: colors.cardGlow.yellow,
-    };
-    const primaryColor = deck.leaderColor.split("/")[0] || "";
-    return colorMap[primaryColor] || colors.muted;
-  };
-
   const Content = () => (
     <View style={[styles.container, { backgroundColor: colors.card, borderColor: colors.border }, style]}>
-      <View style={[styles.imageContainer, { backgroundColor: getFallbackColor() }]}>
-        {deck.leaderImageUrl && (
-          <Image source={deck.leaderImageUrl} style={styles.image} contentFit="cover" />
-        )}
+      <View style={[styles.imageContainer, { backgroundColor: getCardColors(deck.leaderColor)[0] }]}>
+        <CardImage
+          card={{
+            cardNumber: deck.leaderName ?? "NO LEADER",
+            cardType: "leader",
+            color: deck.leaderColor ?? "",
+            imageUrl: deck.leaderImageUrl,
+          }}
+        />
       </View>
       
       <View style={styles.content}>
@@ -44,6 +35,11 @@ export function DeckItem({ deck, onPress, style }: DeckItemProps) {
         <Text style={[styles.leaderName, { color: colors.mutedForeground }]} numberOfLines={1}>
           {deck.leaderName || "No Leader"}
         </Text>
+        {!deck.isValid && deck.validationErrors?.[0] && (
+          <Text style={[styles.validationError, { color: colors.destructive }]} numberOfLines={2}>
+            {deck.validationErrors[0]}
+          </Text>
+        )}
         
         <View style={styles.footer}>
           <Text style={[styles.count, { color: colors.secondaryForeground }]}>
@@ -96,10 +92,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginRight: 16,
   },
-  image: {
-    width: "100%",
-    height: "100%",
-  },
   content: {
     flex: 1,
     justifyContent: "center",
@@ -112,6 +104,11 @@ const styles = StyleSheet.create({
   leaderName: {
     fontSize: 14,
     marginBottom: 8,
+  },
+  validationError: {
+    fontSize: 11,
+    lineHeight: 15,
+    marginBottom: 7,
   },
   footer: {
     flexDirection: "row",

@@ -6,7 +6,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  Image,
+  ImageBackground,
   Modal,
   Animated,
 } from "react-native";
@@ -20,6 +20,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { GameState, CardInstance, PlayerSide, GameAction } from "@workspace/game-engine";
 import { getApiBaseUrl } from "@/lib/url";
 import { LinearGradient } from "expo-linear-gradient";
+import { CardImage } from "@/components/CardImage";
 
 const TYPE_ORDER: Record<string, number> = { character: 0, event: 1, stage: 2, leader: 3 };
 const AnimatedGradient = Animated.createAnimatedComponent(LinearGradient);
@@ -38,12 +39,6 @@ function sortHand(hand: CardInstance[]): CardInstance[] {
 
 function apiBase(): string {
   return getApiBaseUrl();
-}
-
-function resolveCardImageUrl(url: string | null | undefined): string | null {
-  if (!url) return null;
-  if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  return `${apiBase()}${url}`;
 }
 
 async function fetchGameState(gameId: number, token: string | null) {
@@ -102,8 +97,6 @@ function CardThumb({
   don?: number;
   colors: ReturnType<typeof useColors>;
 }) {
-  const imageUrl = resolveCardImageUrl(card.imageUrl);
-
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -115,15 +108,7 @@ function CardThumb({
         rested && styles.cardRested,
       ]}
     >
-      {imageUrl ? (
-        <Image source={{ uri: imageUrl }} style={styles.cardImg} resizeMode="cover" />
-      ) : (
-        <View style={[styles.cardImgPlaceholder, { backgroundColor: colors.secondary }]}>
-          <Text style={[styles.cardImgText, { color: colors.mutedForeground }]} numberOfLines={3}>
-            {card.name}
-          </Text>
-        </View>
-      )}
+      <CardImage card={card} width="100%" height="100%" />
       {(don ?? 0) > 0 && (
         <View style={[styles.donChip, { backgroundColor: colors.primary }]}>
           <Text style={styles.donChipText}>+{don}</Text>
@@ -153,8 +138,6 @@ function HandCard({
   highlighted?: boolean;
   colors: ReturnType<typeof useColors>;
 }) {
-  const imageUrl = resolveCardImageUrl(card.imageUrl);
-
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -167,15 +150,7 @@ function HandCard({
         },
       ]}
     >
-      {imageUrl ? (
-        <Image source={{ uri: imageUrl }} style={styles.handCardImg} resizeMode="cover" />
-      ) : (
-        <View style={[styles.handCardImgPlaceholder, { backgroundColor: colors.secondary }]}>
-          <Text style={[styles.handCardText, { color: colors.mutedForeground }]} numberOfLines={3}>
-            {card.name}
-          </Text>
-        </View>
-      )}
+      <CardImage card={card} width="100%" height={110} />
       <View style={styles.handCardMeta}>
         <Text style={[styles.handCardName, { color: colors.foreground }]} numberOfLines={1}>
           {card.name}
@@ -193,20 +168,12 @@ function HandCard({
 }
 
 function CardDetailModal({ card, onClose, colors }: { card: CardInstance; onClose: () => void; colors: ReturnType<typeof useColors> }) {
-  const imageUrl = resolveCardImageUrl(card.imageUrl);
-
   return (
     <Modal transparent animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={onClose}>
         <TouchableOpacity activeOpacity={1} style={[styles.modalSheet, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => {}}>
           <View style={styles.modalInner}>
-            {imageUrl ? (
-              <Image source={{ uri: imageUrl }} style={styles.modalImg} resizeMode="contain" />
-            ) : (
-              <View style={[styles.modalImgPlaceholder, { backgroundColor: colors.secondary }]}>
-                <Text style={[styles.modalImgText, { color: colors.foreground }]}>{card.name}</Text>
-              </View>
-            )}
+            <CardImage card={card} width={110} height={154} />
             <View style={styles.modalInfo}>
               <Text style={[styles.modalCardName, { color: colors.foreground }]}>{card.name}</Text>
               <Text style={[styles.modalCardType, { color: colors.mutedForeground }]}>
@@ -240,6 +207,176 @@ function CardDetailModal({ card, onClose, colors }: { card: CardInstance; onClos
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
+  );
+}
+
+function PlayerBoard({
+  player,
+  side,
+  isMine,
+  colors,
+  attackingCard,
+  pendingAttack,
+  selectedCard,
+  canAttack,
+  canActivate,
+  onLeaderPress,
+  onCardPress,
+  onCardDetail,
+  onTrashPress,
+  onActivate,
+}: {
+  player: GameState[PlayerSide];
+  side: PlayerSide;
+  isMine: boolean;
+  colors: ReturnType<typeof useColors>;
+  attackingCard: CardInstance | null;
+  pendingAttack: GameState["pendingAttack"];
+  selectedCard: CardInstance | null;
+  canAttack: boolean;
+  canActivate: boolean;
+  onLeaderPress: () => void;
+  onCardPress: (card: CardInstance) => void;
+  onCardDetail: (card: CardInstance) => void;
+  onTrashPress: () => void;
+  onActivate: (instanceId: string) => void;
+}) {
+  const characters = player.field.filter((card) => card.cardType === "character");
+  const stage = player.field.find((card) => card.cardType === "stage");
+  const hasActivateMain = (card: CardInstance) =>
+    card.keywords.some((key) => key.toLowerCase().includes("activate: main")) ||
+    card.effectText?.toLowerCase().includes("[activate: main]") === true;
+
+  return (
+    <ImageBackground
+      source={require("../../assets/images/board-playmat.png")}
+      resizeMode="stretch"
+      style={[styles.playerBoard, !isMine && styles.opponentBoard]}
+      imageStyle={styles.playerBoardImage}
+    >
+      <View style={styles.boardStatus}>
+        <Text style={styles.boardStatusText}>
+          {side.toUpperCase()} · Hand {player.hand.length}
+        </Text>
+      </View>
+
+      <View style={[styles.boardSlot, styles.lifeSlot]}>
+        <LifeCounter count={player.life.length} color={isMine ? colors.success : colors.destructive} />
+      </View>
+
+      <View style={[styles.boardSlot, styles.characterSlot]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={styles.boardCardRow}>
+            {characters.map((card) => (
+              <CardThumb
+                key={card.instanceId}
+                card={card}
+                colors={colors}
+                rested={card.rested}
+                don={card.attachedDon}
+                highlight={
+                  pendingAttack?.targetInstanceId === card.instanceId ||
+                  selectedCard?.instanceId === card.instanceId ||
+                  attackingCard?.instanceId === card.instanceId
+                }
+                onPress={() => onCardPress(card)}
+                onLongPress={() => onCardDetail(card)}
+              />
+            ))}
+          </View>
+        </ScrollView>
+      </View>
+
+      <TouchableOpacity
+        style={[styles.boardSlot, styles.leaderSlot, player.leader.rested && styles.cardRested]}
+        onPress={onLeaderPress}
+        onLongPress={() => onCardDetail(player.leader)}
+      >
+        <CardImage card={player.leader} width="100%" height="100%" />
+        <View style={[styles.leaderPowerBadge, { backgroundColor: colors.card }]}>
+          <Text style={[styles.leaderPowerText, { color: colors.primary }]}>
+            {(player.leader.power ?? 0) + player.leader.attachedDon * 1000}
+          </Text>
+        </View>
+      </TouchableOpacity>
+
+      {isMine && canActivate && hasActivateMain(player.leader) && (
+        <TouchableOpacity
+          style={[styles.boardActivateBtn, { backgroundColor: colors.primary }]}
+          onPress={() => onActivate("leader")}
+        >
+          <Text style={styles.boardActivateText}>LEADER ABILITY</Text>
+        </TouchableOpacity>
+      )}
+
+      <View style={[styles.boardSlot, styles.stageSlot]}>
+        {stage && (
+          <CardThumb
+            card={stage}
+            colors={colors}
+            rested={stage.rested}
+            onPress={() => onCardPress(stage)}
+            onLongPress={() => onCardDetail(stage)}
+          />
+        )}
+      </View>
+
+      <View style={[styles.boardSlot, styles.deckSlot]}>
+        <Text style={styles.stackCount}>{player.deck.length}</Text>
+      </View>
+
+      <View style={[styles.boardSlot, styles.donSlot]}>
+        <DonCounter
+          active={player.donActive}
+          rested={player.donRested}
+          deck={player.donDeck}
+          color={colors.accent}
+        />
+      </View>
+
+      <View style={[styles.boardSlot, styles.costSlot]}>
+        <View style={styles.donPips}>
+          {Array.from({ length: Math.min(10, player.donActive + player.donRested) }).map((_, index) => (
+            <View
+              key={index}
+              style={[
+                styles.donPip,
+                { backgroundColor: index < player.donActive ? colors.accent : colors.mutedForeground },
+              ]}
+            />
+          ))}
+        </View>
+      </View>
+
+      <TouchableOpacity style={[styles.boardSlot, styles.trashSlot]} onPress={onTrashPress}>
+        <Feather name="trash-2" size={15} color="#d1d5db" />
+        <Text style={styles.stackCount}>{player.trash.length}</Text>
+      </TouchableOpacity>
+
+      {isMine && canActivate && (
+        <View style={styles.fieldAbilityRail}>
+          {player.field
+            .filter(hasActivateMain)
+            .map((card) => (
+              <TouchableOpacity
+                key={card.instanceId}
+                style={[styles.fieldAbilityChip, { backgroundColor: colors.card }]}
+                onPress={() => onActivate(card.instanceId)}
+              >
+                <Text style={[styles.fieldAbilityText, { color: colors.primary }]} numberOfLines={1}>
+                  Use {card.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+        </View>
+      )}
+
+      {!isMine && attackingCard && canAttack && (
+        <View pointerEvents="none" style={styles.attackHint}>
+          <Text style={styles.attackHintText}>SELECT TARGET</Text>
+        </View>
+      )}
+    </ImageBackground>
   );
 }
 
@@ -341,9 +478,6 @@ export default function GameBoardScreen() {
     : null;
 
   const sortedHand = sortHand(me.hand);
-  const opponentLeaderImageUrl = resolveCardImageUrl(opp.leader.imageUrl);
-  const myLeaderImageUrl = resolveCardImageUrl(me.leader.imageUrl);
-
   function handleHandCardPress(card: CardInstance) {
     if (busy) return;
     if (pendingTrash && pendingEffect?.side === perspective) {
@@ -483,78 +617,24 @@ export default function GameBoardScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Opponent zone */}
-      <View style={[styles.oppZone, { borderBottomColor: colors.border }]}>
-        <View style={styles.oppTopRow}>
-          <View style={styles.oppInfo}>
-            <Text style={[styles.zoneLabelSmall, { color: colors.mutedForeground }]}>
-              {oppSide.toUpperCase()} — {opp.hand.length} in hand
-            </Text>
-            <LifeCounter count={opp.life.length} color={colors.destructive} />
-          </View>
-          <DonCounter active={opp.donActive} rested={opp.donRested} deck={opp.donDeck} color={colors.accent} />
-        </View>
-
-        <View style={styles.fieldRow}>
-          <TouchableOpacity
-            onPress={() => { if (attackingCard && canAttack) handleAttackLeader(); }}
-            onLongPress={() => setDetailCard({ ...opp.leader, instanceId: "opp-leader" })}
-            style={[
-              styles.leaderThumb,
-              { borderColor: (attackingCard && canAttack) ? colors.destructive : colors.border },
-              opp.leader.rested && styles.cardRested,
-            ]}
-          >
-            {opponentLeaderImageUrl ? (
-              <Image source={{ uri: opponentLeaderImageUrl }} style={styles.leaderImg} resizeMode="cover" />
-            ) : (
-              <View style={[styles.leaderPlaceholder, { backgroundColor: colors.secondary }]}>
-                <Text style={[styles.leaderName, { color: colors.foreground }]} numberOfLines={2}>{opp.leader.name}</Text>
-              </View>
-            )}
-            <View style={[styles.leaderPowerBadge, { backgroundColor: colors.card }]}>
-              <Text style={[styles.leaderPowerText, { color: colors.accent }]}>
-                {(opp.leader.power ?? 0) + opp.leader.attachedDon * 1000}
-              </Text>
-            </View>
-            {opp.leader.attachedDon > 0 && (
-              <View style={[styles.leaderDonBadge, { backgroundColor: colors.primary }]}>
-                <Text style={styles.leaderDonText}>+{opp.leader.attachedDon}</Text>
-              </View>
-            )}
-            {(attackingCard && canAttack) && (
-              <View style={[styles.attackTarget, { backgroundColor: colors.destructive }]}>
-                <Text style={styles.attackTargetText}>ATTACK</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.fieldScroll}>
-            <View style={styles.fieldCards}>
-              {opp.field.map((card) => (
-                <CardThumb
-                  key={card.instanceId}
-                  card={card}
-                  colors={colors}
-                  rested={card.rested}
-                  don={card.attachedDon}
-                  highlight={pendingAttack?.targetInstanceId === card.instanceId}
-                  onPress={() => handleFieldCardPress(card, "opp")}
-                  onLongPress={() => setDetailCard(card)}
-                />
-              ))}
-              {opp.field.length === 0 && (
-                <Text style={[styles.emptyField, { color: colors.mutedForeground }]}>Empty field</Text>
-              )}
-            </View>
-          </ScrollView>
-
-          <TouchableOpacity style={styles.trashBtn} onPress={() => setShowTrash(oppSide)}>
-            <Feather name="trash-2" size={13} color={colors.mutedForeground} />
-            <Text style={[styles.trashCount, { color: colors.mutedForeground }]}>{opp.trash.length}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <PlayerBoard
+        player={opp}
+        side={oppSide}
+        isMine={false}
+        colors={colors}
+        attackingCard={attackingCard}
+        pendingAttack={pendingAttack}
+        selectedCard={selectedCard}
+        canAttack={canAttack}
+        canActivate={false}
+        onLeaderPress={() => {
+          if (attackingCard && canAttack) handleAttackLeader();
+        }}
+        onCardPress={(card) => handleFieldCardPress(card, "opp")}
+        onCardDetail={setDetailCard}
+        onTrashPress={() => setShowTrash(oppSide)}
+        onActivate={() => {}}
+      />
 
       {/* Pending Attack Banner */}
       {pendingAttack && (
@@ -602,82 +682,22 @@ export default function GameBoardScreen() {
         ))}
       </ScrollView>
 
-      {/* My zone */}
-      <View style={[styles.myZone, { borderTopColor: colors.border }]}>
-        <View style={styles.myFieldRow}>
-          <TouchableOpacity
-            onPress={handleLeaderAttack}
-            onLongPress={() => setDetailCard({ ...me.leader, instanceId: "my-leader" })}
-            style={[
-              styles.leaderThumb,
-              { borderColor: attackingCard?.instanceId === "leader" ? colors.primary : colors.border },
-              me.leader.rested && styles.cardRested,
-            ]}
-          >
-            {myLeaderImageUrl ? (
-              <Image source={{ uri: myLeaderImageUrl }} style={styles.leaderImg} resizeMode="cover" />
-            ) : (
-              <View style={[styles.leaderPlaceholder, { backgroundColor: colors.secondary }]}>
-                <Text style={[styles.leaderName, { color: colors.foreground }]} numberOfLines={2}>{me.leader.name}</Text>
-              </View>
-            )}
-            <View style={[styles.leaderPowerBadge, { backgroundColor: colors.card }]}>
-              <Text style={[styles.leaderPowerText, { color: colors.primary }]}>
-                {(me.leader.power ?? 0) + me.leader.attachedDon * 1000}
-              </Text>
-            </View>
-            {me.leader.attachedDon > 0 && (
-              <View style={[styles.leaderDonBadge, { backgroundColor: colors.primary }]}>
-                <Text style={styles.leaderDonText}>+{me.leader.attachedDon}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.fieldScroll}>
-            <View style={styles.fieldCards}>
-              {me.field.map((card) => (
-                <View key={card.instanceId} style={styles.fieldCardWrapper}>
-                  <CardThumb
-                    card={card}
-                    colors={colors}
-                    rested={card.rested}
-                    don={card.attachedDon}
-                    highlight={selectedCard?.instanceId === card.instanceId || attackingCard?.instanceId === card.instanceId}
-                    onPress={() => handleFieldCardPress(card, "mine")}
-                    onLongPress={() => setDetailCard(card)}
-                  />
-                  {/* Activate: Main button for field cards with such ability */}
-                  {isMyTurn && state.phase === "main" && !pendingAttack && !card.rested && card.keywords.some((k) => k.startsWith("Activate: Main")) && (
-                    <TouchableOpacity
-                      style={[styles.activateBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
-                      onPress={() => doAction({ type: "activate_ability", instanceId: card.instanceId })}
-                      disabled={busy}
-                    >
-                      <Text style={[styles.activateBtnText, { color: colors.primary }]}>Use</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              ))}
-              {me.field.length === 0 && (
-                <Text style={[styles.emptyField, { color: colors.mutedForeground }]}>Empty field</Text>
-              )}
-            </View>
-          </ScrollView>
-
-          <TouchableOpacity style={styles.trashBtn} onPress={() => setShowTrash(perspective)}>
-            <Feather name="trash-2" size={13} color={colors.mutedForeground} />
-            <Text style={[styles.trashCount, { color: colors.mutedForeground }]}>{me.trash.length}</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.myInfoRow}>
-          <View>
-            <Text style={[styles.zoneLabelSmall, { color: colors.mutedForeground }]}>{perspective.toUpperCase()} (You)</Text>
-            <LifeCounter count={me.life.length} color={colors.success} />
-          </View>
-          <DonCounter active={me.donActive} rested={me.donRested} deck={me.donDeck} color={colors.primary} />
-        </View>
-      </View>
+      <PlayerBoard
+        player={me}
+        side={perspective}
+        isMine
+        colors={colors}
+        attackingCard={attackingCard}
+        pendingAttack={pendingAttack}
+        selectedCard={selectedCard}
+        canAttack={canAttack}
+        canActivate={isMyTurn && state.phase === "main" && !pendingAttack && !busy}
+        onLeaderPress={handleLeaderAttack}
+        onCardPress={(card) => handleFieldCardPress(card, "mine")}
+        onCardDetail={setDetailCard}
+        onTrashPress={() => setShowTrash(perspective)}
+        onActivate={(instanceId) => doAction({ type: "activate_ability", instanceId })}
+      />
 
       {/* Hand */}
       <View style={[styles.handSection, { borderTopColor: colors.border }]}>
@@ -952,7 +972,123 @@ const styles = StyleSheet.create({
   perspectiveBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1 },
   perspectiveBtnText: { fontSize: 12, fontWeight: "bold" },
 
+  playerBoard: {
+    width: "100%",
+    height: 170,
+    position: "relative",
+    overflow: "hidden",
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: "rgba(148,163,184,0.35)",
+    backgroundColor: "#07101f",
+  },
+  opponentBoard: { backgroundColor: "#16090d" },
+  playerBoardImage: { opacity: 0.58 },
+  boardStatus: {
+    position: "absolute",
+    top: 4,
+    left: "40%",
+    right: "20%",
+    alignItems: "center",
+    zIndex: 5,
+  },
+  boardStatusText: {
+    color: "#f8fafc",
+    fontSize: 9,
+    fontWeight: "800",
+    backgroundColor: "rgba(2,6,23,0.72)",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  boardSlot: {
+    position: "absolute",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 5,
+  },
+  lifeSlot: { left: "2%", top: "8%", width: "15%", height: "48%" },
+  characterSlot: { left: "19%", top: "7%", width: "68%", height: "34%" },
+  leaderSlot: {
+    left: "47%",
+    top: "43%",
+    width: "13%",
+    height: "29%",
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "rgba(250,204,21,0.9)",
+    zIndex: 3,
+  },
+  stageSlot: { left: "62%", top: "43%", width: "14%", height: "29%" },
+  deckSlot: {
+    right: "3%",
+    top: "43%",
+    width: "11%",
+    height: "29%",
+    borderWidth: 1,
+    borderColor: "rgba(226,232,240,0.55)",
+    backgroundColor: "rgba(2,6,23,0.72)",
+  },
+  donSlot: { left: "2%", bottom: "8%", width: "15%", height: "25%" },
+  costSlot: { left: "19%", bottom: "8%", width: "57%", height: "18%" },
+  trashSlot: {
+    right: "3%",
+    bottom: "8%",
+    width: "11%",
+    height: "22%",
+    borderWidth: 1,
+    borderColor: "rgba(226,232,240,0.4)",
+    backgroundColor: "rgba(2,6,23,0.68)",
+  },
+  boardCardRow: { flexDirection: "row", gap: 5, alignItems: "center", paddingHorizontal: 3 },
+  stackCount: { color: "#f8fafc", fontSize: 13, fontWeight: "900" },
+  donPips: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 4 },
+  donPip: { width: 13, height: 18, borderRadius: 2, borderWidth: 1, borderColor: "rgba(255,255,255,0.45)" },
+  boardActivateBtn: {
+    position: "absolute",
+    left: "43%",
+    top: "74%",
+    zIndex: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 5,
+  },
+  boardActivateText: { color: "#fff", fontSize: 7, fontWeight: "900" },
+  fieldAbilityRail: {
+    position: "absolute",
+    left: "19%",
+    right: "17%",
+    top: "35%",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 4,
+    zIndex: 7,
+  },
+  fieldAbilityChip: { maxWidth: 100, paddingHorizontal: 5, paddingVertical: 3, borderRadius: 5 },
+  fieldAbilityText: { fontSize: 7, fontWeight: "800" },
+  attackHint: {
+    position: "absolute",
+    left: "35%",
+    right: "35%",
+    top: "45%",
+    paddingVertical: 5,
+    alignItems: "center",
+    borderRadius: 7,
+    backgroundColor: "rgba(220,38,38,0.86)",
+    zIndex: 10,
+  },
+  attackHintText: { color: "#fff", fontSize: 9, fontWeight: "900" },
+
   oppZone: { borderBottomWidth: 1, paddingHorizontal: 8, paddingVertical: 6 },
+  playmatZone: {
+    overflow: "hidden",
+    backgroundColor: "rgba(2, 8, 23, 0.92)",
+  },
+  playmatImage: { opacity: 0.3 },
+  playmatImageOpponent: {
+    opacity: 0.24,
+    transform: [{ rotate: "180deg" }],
+  },
   oppTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 },
   oppInfo: { flex: 1 },
 
